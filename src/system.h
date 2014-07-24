@@ -16,17 +16,15 @@ class System
 {
 public:
     System(const uint nParticles,
-               const uint NX,
-               const uint NY,
-               const uint NZ,
-               const uint movesPerSampling,
-               const double flatnessCriterion,
-               const uint overlap,
-               const uint nbinsOverMinWindowSizeFlat,
-               const uint minWindowSize,
-               const uint windowIncrementSize,
-               const double *f,
-               function<double()> URNG);
+           const uint NX,
+           const uint NY,
+           const uint NZ,
+           const uint movesPerSampling,
+           const double flatnessCriterion,
+           const uint overlap,
+           const uint minWindowSize,
+           const string path,
+           function<double()> URNG);
 
     virtual bool isOccupiedLoction(const uint x, const uint y, const uint z) const = 0;
 
@@ -40,6 +38,13 @@ public:
 
     virtual void getPosition(const uint particleIndex, uint &x, uint &y, uint &z) const = 0;
 
+    void execute(const uint nbins, const double adaptive, const double fStart, const double fEnd, function<double(double)> reduceFunction);
+
+    void execute(const uint nbins, const double adaptive, const double fStart, const double fEnd)
+    {
+        execute(nbins, adaptive, fStart, fEnd, [] (double pre) {return sqrt(pre);});
+    }
+
     void sampleWindow(Window *window);
 
     bool doWLMCMove(Window *window);
@@ -50,9 +55,9 @@ public:
 
     void locateGlobalExtremaValues(double &min, double &max);
 
-    void setupPresetWindowConfigurations(const double min, const double max, const uint n);
+    void setupPresetWindowConfigurations(const Window &mainWindow);
 
-    void loadConfigurationClosestToValue(const double value);
+    void loadConfigurationForWindow(const Window *window);
 
     uint getPresetBinFromValue(const double value) const;
 
@@ -78,24 +83,19 @@ public:
         return m_overlap;
     }
 
-    uint minWindowSizeFlat(const uint nbins) const
-    {
-        return nbins/m_nbinsOverMinWindowSizeFlat;
-    }
-
     uint minWindowSize() const
     {
         return m_minWindowSize;
     }
 
-    const uint &windowIncrementSize() const
-    {
-        return m_windowIncrementSize;
-    }
-
     const double &f() const
     {
-        return *m_f;
+        return m_f;
+    }
+
+    const string path() const
+    {
+        return m_path;
     }
 
     enum class extrema
@@ -119,16 +119,19 @@ private:
 
     const double m_flatnessCriterion;
     const uint m_overlap;
-    const uint m_nbinsOverMinWindowSizeFlat;
     const uint m_minWindowSize;
-    const uint m_windowIncrementSize;
 
-    const double *m_f;
+    double m_f;
 
     const function<double()> m_URNG;
 
+    const string m_path;
+
     ucube m_presetWindowConfigurations;
     vec m_presetWindowValues;
+
+    umat m_presetMinimum;
+    umat m_presetMaximum;
 
     double getGlobalExtremum(const extrema type);
 

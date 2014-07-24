@@ -9,40 +9,51 @@ using namespace WLMC;
 Window::Window(System *system,
                const vec &parentDOS,
                const vec &parentEnergies,
-               const uint lowerLimit,
-               const uint upperLimit,
-               const uint overlapPoint,
+               const vector<bool> &parentBinDeflation,
+               const uint lowerLimitOnParent,
+               const uint upperLimitOnParent,
                OverlapTypes overlapType,
                bool allowSubwindowing) :
     m_system(system),
     m_allowsSubwindowing(allowSubwindowing),
-    m_overlapPoint(overlapPoint),
     m_overlapType(overlapType),
-    m_lowerLimitOnParent(lowerLimit),
-    m_upperLimitOnParent(upperLimit),
-    m_nbins(upperLimit - lowerLimit),
-    m_minValue(parentEnergies(lowerLimit)),
-    m_maxValue(parentEnergies(upperLimit - 1)),
+    m_lowerLimitOnParent(lowerLimitOnParent),
+    m_upperLimitOnParent(upperLimitOnParent),
+    m_nbins(upperLimitOnParent - lowerLimitOnParent),
+    m_minValue(parentEnergies(lowerLimitOnParent)),
+    m_maxValue(parentEnergies(upperLimitOnParent - 1)),
     m_valueSpan(m_maxValue - m_minValue),
-    m_DOS(parentDOS(span(lowerLimit, upperLimit - 1))),
-    m_energies(parentEnergies(span(lowerLimit, upperLimit - 1))),
-    m_visitCounts(uvec(m_nbins))
+    m_DOS(parentDOS(span(lowerLimitOnParent, upperLimitOnParent - 1))),
+    m_energies(parentEnergies(span(lowerLimitOnParent, upperLimitOnParent - 1))),
+    m_visitCounts(uvec(m_nbins)),
+    m_gradientSampleCounter(0),
+    m_spanSum(0),
+    m_centerSum(0),
+    m_deflatedBins(vector<bool>(m_nbins)),
+    m_outputLevel(0)
 {
-    m_visitCounts.fill(m_unsetCount);
+    for (uint i = 0; i < m_nbins; ++i)
+    {
+        m_visitCounts(i) = m_unsetCount;
+        m_deflatedBins.at(i) = parentBinDeflation.at(m_lowerLimitOnParent + i);
+    }
 
-    BADAss(upperLimit, >, lowerLimit, "illegal window.");
+
+    BADAss(upperLimitOnParent, >, lowerLimitOnParent, "illegal window.");
+
 }
 
-Window::Window(System *system, const uint nBins,
+Window::Window(System *system,
+               const uint nBins,
                const double minValue,
                const double maxValue,
                bool allowSubwindowing) :
     Window(system,
            ones(nBins),
            linspace(minValue, maxValue, nBins),
+           vector<bool>(nBins, false),
            0,
            nBins,
-           0,
            Window::OverlapTypes::None,
            allowSubwindowing)
 {
@@ -53,9 +64,9 @@ Window::Window(const Window &parentWindow, const WindowParams &windowParams) :
     Window(parentWindow.system(),
            parentWindow.DOS(),
            parentWindow.energies(),
+           parentWindow.deflatedBins(),
            windowParams.m_lowerLimit,
            windowParams.m_upperLimit,
-           windowParams.m_overlapPoint,
            windowParams.m_overlapType,
            windowParams.m_allowSubwindowing)
 {
@@ -122,24 +133,49 @@ vec Window::getHistogram(const uint nmoves)
 
 void Window::loadInitialConfig()
 {
-    m_system->loadConfigurationClosestToValue((m_maxValue + m_minValue)/2);
+    m_system->loadConfigurationForWindow(this);
+
+    BADAssBool(isLegal(m_system->getTotalValue()),
+               "Loaded configuration is outside the windowed values.",
+               badass::quickie([this] ()
+    {
+        cout << m_minValue << " " << m_maxValue << endl;
+        cout << m_system->getTotalValue() << endl;
+    }
+    )
+               );
 }
 
 void Window::calculateWindow()
 {
+    BADAssBool(isLegal(m_system->getTotalValue()), "Initigal configuration is illegal.", badass::quickie([&] ()
+    {
+        cout << m_minValue << " " << m_maxValue << " " << m_system->getTotalValue() << endl;
+    }));
 
     cout << "sampling on " << m_lowerLimitOnParent << " " << m_upperLimitOnParent << " f = " << m_system->f() << endl;
 
-    vector<WindowParams> roughWindowParams;
-
-    while (!isFlat())
+    //Need a method for saying that you are flat if flat on the area below overlap. Same goes for continuity.
+    while (m_subWindows.empty() && !isFlatOnParent())
     {
 
         m_system->sampleWindow(this);
 
-        m_DOS = normalise(m_DOS);
+        normaliseDOS();
 
         findSubWindows();
+
+        dump_output();
+
+        //tmp
+        if (!m_subWindows.empty())
+        {
+            for (Window *w: m_subWindows)
+            {
+                cout << "subWindow found at " << w->lowerLimitOnParent() << " " << w->upperLimitOnParent() << endl;
+            }
+        }
+        //
 
         for (Window *subWindow : m_subWindows)
         {
@@ -148,17 +184,16 @@ void Window::calculateWindow()
             mergeWith(subWindow);
         }
 
-
-        BADAssBool(!m_subWindows.empty() && isFlat(), "subwindows were not merged properly.");
-
     }
+
+    cout << "Window done: " << m_lowerLimitOnParent << " " << m_upperLimitOnParent << endl;
 
 }
 
 double Window::estimateFlatness(const uint lowerLimit, const uint upperLimit) const
 {
 
-    BADAss(upperLimit - lowerLimit, <, m_system->minWindowSize(),
+    BADAss(upperLimit - lowerLimit, >=, m_system->minWindowSize(),
            "Flatness requested on window lower than minimum limit of rough areas.");
 
     uint min = std::numeric_limits<uint>::max();
@@ -198,34 +233,47 @@ double Window::estimateFlatness(const uint lowerLimit, const uint upperLimit) co
 
 void Window::findSubWindows()
 {
+
     if (!allowsSubwindowing())
     {
+        if (m_outputLevel != 1) cout << "subwindowing: subwindowing illegal." << endl;
+
+        m_outputLevel = 1;
+
         return;
     }
 
     else if (!findFlatArea())
     {
+        if (m_outputLevel != 2) cout << "subwindowing: no flat area found." << endl;
+
+        m_outputLevel = 2;
+
         return;
     }
 
     else if (!flatProfileIsContinousOnParent())
     {
+        if (m_outputLevel != 3) cout << "subwindowing: flat area not contonous on parent." << endl;
+
+        m_outputLevel = 3;
+
         return;
     }
 
-    else if (flatAreaIsDominant())
+    else if (!flatspanGradientConverged())
     {
-        m_allowsSubwindowing = false;
-        return;
-    }
+        if (m_outputLevel != 4) cout << "subwindowing: flat area has not converged." << endl;
 
-    else if (flatAreaIsInsufficient())
-    {
+        m_outputLevel = 4;
+
         return;
     }
 
     else
     {
+
+        cout << "found flat area " << m_flatAreaLower << " " << m_flatAreaUpper << " " << estimateFlatness(m_flatAreaLower, m_flatAreaUpper) << endl;
 
         vector<WindowParams> roughWindowParams;
         findComplementaryRoughAreas(roughWindowParams);
@@ -239,88 +287,6 @@ void Window::findSubWindows()
         }
 
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    //    bool allowSubWindowing;
-    //    uint lowerLimitNewWindow, upperLimitNewWindow;
-
-    //    if (isFlat(lowerLimitFlat, upperLimitFlat))
-    //    {
-    //        vector<uvec2> roughAreas;
-    //        vector<Window::OVERLAPTYPES> overlaps;
-
-    //        findComplementaryRoughAreas(lowerLimitFlat, upperLimitFlat, roughAreas, overlaps);
-
-    //        vector<uvec2> _roughAreas(roughAreas.size());
-    //        vector<uint> overlapPointBins(roughAreas.size());
-
-    //        for (uint i = 0; i < roughAreas.size(); ++i)
-    //        {
-    //            uvec2 roughArea = roughAreas.at(i);
-    //            Window::OVERLAPTYPES overlapType = overlaps.at(i);
-
-    //            if (roughArea(1) - roughArea(0) < m_system->minWindowSizeRough())
-    //            {
-    //                cout << "too low rought area" << endl;
-    //                return;
-    //            }
-
-    //            if (overlapType == Window::OVERLAPTYPES::LOWER)
-    //            {
-    //                overlapPointBins.at(i) = roughArea(1);
-    //            }
-    //            else
-    //            {
-    //                overlapPointBins.at(i) = roughArea(0);
-    //            }
-
-    //            getSubWindowLimits(overlapType, roughArea(0), roughArea(1), lowerLimitNewWindow, upperLimitNewWindow, allowSubWindowing);
-
-    //            _roughAreas.at(i) = {lowerLimitNewWindow, upperLimitNewWindow};
-    //        }
-
-    //        tmp_output(lowerLimitFlat, upperLimitFlat, _roughAreas);
-
-    //        for (uint i = 0; i < roughAreas.size(); ++i)
-    //        {
-    //            uvec2 roughArea = roughAreas.at(i);
-    //            Window::OVERLAPTYPES overlapType = overlaps.at(i);
-
-
-    //            getSubWindowLimits(overlapType, roughArea(0), roughArea(1), lowerLimitNewWindow, upperLimitNewWindow, allowSubWindowing);
-
-    //            cout << "############### SPAWNED SUB WINDOW ###################### " <<  lowerLimitNewWindow << " " << upperLimitNewWindow << endl;
-
-    //            m_subWindows.push_back(new Window(m_system, m_DOS, m_energies, lowerLimitNewWindow, upperLimitNewWindow, overlapPointBins.at(i), overlapType, allowSubWindowing));
-    //        }
-
-    //        return;
-    ////        return getMeanFlatness(lowerLimitFlat, upperLimitFlat);
-
-    //    }
-    //    else
-    //    {
-    //        tmp_output(0, 0, {{0, m_nbins}});
-    //        return;
-    //    }
 
 }
 
@@ -348,30 +314,74 @@ double Window::getMeanFlatness(const uint lowerLimit, const uint upperLimit) con
 
 void Window::findComplementaryRoughAreas(vector<WindowParams> &roughWindowParams) const
 {
-
-    if (m_flatAreaLower != 0)
+    if (!overlapsAtBottom())
     {
-        roughWindowParams.push_back(WindowParams(0, m_flatAreaLower, Window::OverlapTypes::Upper));
+
+        if (m_flatAreaLower != 0)
+        {
+            roughWindowParams.push_back(WindowParams(0, m_flatAreaLower, Window::OverlapTypes::Upper));
+        }
+
     }
 
-    if (m_flatAreaUpper != m_nbins)
+    if (!overlapsAtTop())
     {
-        roughWindowParams.push_back(WindowParams(m_flatAreaUpper, m_nbins, Window::OverlapTypes::Lower));
+
+        if (m_flatAreaUpper != m_nbins)
+        {
+            roughWindowParams.push_back(WindowParams(m_flatAreaUpper, m_nbins, Window::OverlapTypes::Lower));
+        }
+
     }
 
 }
 
 bool Window::findFlatArea()
 {
-    m_flatAreaLower = m_flatAreaUpper = 0;
-
     if (scanForFlattestArea())
     {
         expandFlattestArea();
+
+        uint center = (m_flatAreaLower + m_flatAreaUpper)/2;
+        uint span = m_flatAreaUpper - m_flatAreaLower;
+
+        m_centerSum += center;
+        m_spanSum += span;
+
+        m_gradientSampleCounter++;
+
+        for (uint i = 1; i < 4; ++i)
+        {
+            m_centerSums(i - 1) = m_centerSums(i);
+            m_spanSums(i - 1) = m_spanSums(i);
+        }
+
+        m_centerSums(3) = m_centerSum/m_gradientSampleCounter;
+        m_spanSums(3) = m_spanSum/m_gradientSampleCounter;
+
+        vec weightsDouble = {-1, 4, -5, 2};
+        vec weightsSingle = {0, 1.5, -3.0, 1.5};
+
+        m_centerGradient = 0;
+        m_spanGradient = 0;
+        m_spanLaplace = 0;
+
+        for (uint i = 0; i < 4; ++i)
+        {
+            m_centerGradient += weightsSingle(i)*m_centerSums(i);
+            m_spanGradient += weightsSingle(i)*m_spanSums(i);
+            m_spanLaplace += weightsDouble(i)*m_spanSums(i);
+        }
+
         return true;
     }
 
-    return false;
+    else
+    {
+        m_flatAreaLower = m_flatAreaUpper = 0;
+        return false;
+    }
+
 }
 
 bool Window::scanForFlattestArea()
@@ -380,7 +390,7 @@ bool Window::scanForFlattestArea()
     //of size windowIncrementSize. Interval of maximum is stored in lowerLimit and upperLimit.
 
     uint lowerLimitScan = 0;
-    uint upperLimitScan = m_system->minWindowSizeFlat(m_nbins);
+    uint upperLimitScan = m_system->minWindowSize();
 
     double Fn;
 
@@ -388,25 +398,47 @@ bool Window::scanForFlattestArea()
 
     double maxFn = unsetFn;
 
+    const double maximalSparsity = 0.5;
+
     while (upperLimitScan < m_nbins)
     {
         Fn = estimateFlatness(lowerLimitScan, upperLimitScan);
 
         if (Fn > maxFn)
         {
-            maxFn = Fn;
+            if (sparsity(lowerLimitScan, upperLimitScan) < maximalSparsity)
+            {
 
-            m_flatAreaLower = lowerLimitScan;
-            m_flatAreaUpper = upperLimitScan;
+                maxFn = Fn;
+
+                m_flatAreaLower = lowerLimitScan;
+                m_flatAreaUpper = upperLimitScan;
+
+            }
 
         }
 
-        lowerLimitScan += m_system->windowIncrementSize();
-        upperLimitScan += m_system->windowIncrementSize();
+        lowerLimitScan++;
+        upperLimitScan++;
     }
 
-    return maxFn < m_system->flatnessCriterion();
+    return maxFn >= m_system->flatnessCriterion();
 
+}
+
+double Window::sparsity(const uint lowerLimit, const uint upperLimit) const
+{
+    double sparsity = 0;
+
+    for (uint bin = lowerLimit; bin < upperLimit; ++bin)
+    {
+        if (isDeflatedBin(bin) || isUnsetCount(bin))
+        {
+            sparsity++;
+        }
+    }
+
+    return sparsity/(upperLimit - lowerLimit);
 }
 
 void Window::expandFlattestArea()
@@ -419,7 +451,7 @@ void Window::expandFlattestArea()
 
     uint maxSpan = m_flatAreaUpper - m_flatAreaLower;
 
-    while (expandingLowerLimit > 0)
+    while (expandingLowerLimit >= 0)
     {
         uint expandingUpperLimit = upperLimitStart;
 
@@ -439,24 +471,24 @@ void Window::expandFlattestArea()
                 }
             }
 
-            expandingUpperLimit += m_system->windowIncrementSize();
+            expandingUpperLimit++;
         }
 
-        expandingLowerLimit -= m_system->windowIncrementSize();
+        expandingLowerLimit--;
     }
 
 }
 
 bool Window::flatProfileIsContinousOnParent() const
 {
-    if (m_overlapType == Window::OverlapTypes::Lower)
+    if (overlapsAtBottom())
     {
-        return m_flatAreaLower == 0;
+        return m_flatAreaLower <= m_system->overlap();
     }
 
-    else if (m_overlapType == Window::OverlapTypes::Upper)
+    else if (overlapsAtTop())
     {
-        return m_flatAreaUpper == m_nbins;
+        return m_flatAreaUpper >= m_nbins - m_system->overlap();
     }
 
     else
@@ -470,55 +502,51 @@ void Window::getSubWindowLimits(WindowParams &windowParams) const
 
     uint span = windowParams.m_upperLimit - windowParams.m_lowerLimit;
 
+    //Expand upper or lower limits that are too small. This disables the new window from having children.
+    if (span < m_system->minWindowSize())
+    {
+        cout << "span " << span << " too low for window size " << m_system->minWindowSize() << endl;
+
+        windowParams.m_allowSubwindowing = false;
+
+        if (windowParams.m_overlapType == Window::OverlapTypes::Lower)
+        {
+            BADAss(windowParams.m_upperLimit, >=, m_system->minWindowSize());
+
+            windowParams.m_lowerLimit = windowParams.m_upperLimit - m_system->minWindowSize();
+        }
+
+        else if (windowParams.m_overlapType == Window::OverlapTypes::Upper)
+        {
+            windowParams.m_upperLimit = windowParams.m_lowerLimit + m_system->minWindowSize();
+
+            BADAss(windowParams.m_upperLimit, <=, m_nbins);
+        }
+
+    }
 
 
+    //Add the overlap
+    if (windowParams.m_overlapType == Window::OverlapTypes::Lower)
+    {
+        BADAss(windowParams.m_lowerLimit, >=, m_system->overlap());
 
+        windowParams.m_lowerLimit -= m_system->overlap();
+    }
 
-//    uint newSize = upperLimitRough - lowerLimitRough + m_system->overlap();
+    else if (windowParams.m_overlapType == Window::OverlapTypes::Upper)
+    {
+        BADAss(m_nbins - windowParams.m_upperLimit, >=, m_system->overlap());
 
-//    //If the desired area is lower than the minimum window, we need to increase it.
-//    if (upperLimitRough - lowerLimitRough < m_system->minWindowSize() || newSize < m_system->minWindowSizeFlat(newSize))
-//    {
-//        allowSubWindowing = false;
-//        return;
-//    }
-
-//    else
-//    {
-//        lowerLimit = lowerLimitRough;
-//        upperLimit = upperLimitRough;
-
-//        allowSubWindowing = true;
-//    }
-
-//    //We are not guaranteed a window of size at least minWindow.
-//    //Now we add the overlap.
-
-//    if (overlapType == Window::OverlapTypes::Lower)
-//    {
-//        if (lowerLimit < m_system->overlap())
-//        {
-//            cout << "ERROR IN LOWER OVERLAP " << lowerLimitRough << " " << upperLimitRough << " " << lowerLimit << endl;
-//            throw std::runtime_error("asds");
-//        }
-
-//        lowerLimit -= m_system->overlap();
-//    }
-//    else
-//    {
-//        if (upperLimit > m_nbins - m_system->overlap())
-//        {
-//            cout << "ERROR IN UPPER OVERLAP " << lowerLimitRough << " " << upperLimitRough << " " << upperLimit << endl;
-//            throw std::runtime_error("asds");
-//        }
-
-//        upperLimit += m_system->overlap();
-//    }
+        windowParams.m_upperLimit += m_system->overlap();
+    }
 
 }
 
 void Window::registerVisit(const uint bin)
 {
+    BADAssBool(!isDeflatedBin(bin), "deflated bins should not be visited.");
+
     if (isUnsetCount(bin))
     {
         m_visitCounts(bin) = 1;
@@ -550,9 +578,42 @@ void Window::reset()
         delete subWindow;
     }
 
+
+    m_gradientSampleCounter = 0;
+
+    m_spanSum = 0;
+    m_centerSum = 0;
+
     m_subWindows.clear();
 
     m_visitCounts.fill(m_unsetCount);
+
+    m_outputLevel = 0;
+}
+
+void Window::deflateDOS()
+{
+    double eps = 1E-16;
+    for (uint bin = 0; bin < m_nbins; ++bin)
+    {
+
+        if (isDeflatedBin(bin))
+        {
+            continue;
+        }
+
+        else if (m_DOS(bin) < eps)
+        {
+            m_visitCounts(bin) = m_unsetCount;
+            m_DOS(bin) = 0;
+            m_deflatedBins.at(bin) = true;
+        }
+    }
+}
+
+void Window::resetDOS()
+{
+    m_DOS.ones();
 }
 
 bool Window::allowsSubwindowing() const
@@ -560,24 +621,20 @@ bool Window::allowsSubwindowing() const
     return m_allowsSubwindowing;
 }
 
-bool Window::flatAreaIsInsufficient() const
+bool Window::flatspanGradientConverged() const
 {
-    uint N = 0;
-    if (m_overlapType == OverlapTypes::None)
+    if (m_gradientSampleCounter < m_centerSums.n_elem)
     {
-        N = 2;
-    }
-    else
-    {
-        N = 1;
+        return false;
     }
 
-    return m_flatAreaUpper - m_flatAreaLower < N*m_system->overlap();
-}
+    const double lim = 0.1;
 
-bool Window::flatAreaIsDominant() const
-{
-    return (m_nbins - (m_flatAreaUpper - m_flatAreaLower)) < m_system->minWindowSize();
+//    cout << "CG " << m_centerGradient << endl;
+//    cout << "SG " << m_spanGradient << endl;
+//    cout << "SL " << m_spanLaplace << endl;
+
+    return m_spanLaplace <= 0  && fabs(m_spanGradient) < lim && fabs(m_centerGradient) < lim;
 }
 
 bool Window::isFlat(const uint lowerLimit, const uint upperLimit) const
@@ -585,85 +642,145 @@ bool Window::isFlat(const uint lowerLimit, const uint upperLimit) const
     return estimateFlatness(lowerLimit, upperLimit) >= m_system->flatnessCriterion();
 }
 
+bool Window::isFlatOnParent() const
+{
+    if (overlapsAtTop())
+    {
+        return isFlat(0, m_nbins - m_system->overlap());
+    }
+    else if (overlapsAtBottom())
+    {
+        return isFlat(m_system->overlap(), m_nbins);
+    }
+    else
+    {
+        return isFlat();
+    }
+}
+
 void Window::mergeWith(Window *other)
 {
+    cout << "Merged subwindow " <<  other->lowerLimitOnParent() << " " << other->upperLimitOnParent() << " on " << m_lowerLimitOnParent << " " << m_upperLimitOnParent << endl;
 
-    double meanVisitAtFlatArea = getMeanFlatness(m_flatAreaLower, m_flatAreaUpper);
+    span spanOnParent, _span;
+    uint overlapPointOnParent, overlapPoint;
 
-    cout << "############### MERGED SUB WINDOW ###################### " <<  other->lowerLimitOnParent() << " " << other->upperLimitOnParent() << endl;
+    other->normaliseDOS();
+    normaliseDOS();
 
-    uint pointSub;
-    uint pointSup;
 
-    uint repl_l;
-    uint repl_u;
-
-    if (other->overlapType() == Window::OverlapTypes::Lower)
+    overlapPointOnParent = getOverlapPoint(other);
+    if (overlapPointOnParent == m_unsetCount)
     {
-        pointSub = m_system->overlap();
-        repl_l = other->lowerLimitOnParent() + m_system->overlap();
-        repl_u = other->upperLimitOnParent();
+        return;
+    }
+
+    overlapPoint = overlapPointOnParent - other->lowerLimitOnParent();
+
+    if (other->overlapsAtBottom())
+    {
+        _span = span(overlapPoint, other->nbins() - 1);
+        spanOnParent = span(overlapPointOnParent, other->upperLimitOnParent() - 1);
     }
 
     else
     {
-        pointSub = other->nbins() - m_system->overlap();
-        repl_l = other->lowerLimitOnParent();
-        repl_u = other->upperLimitOnParent() - m_system->overlap();
+        _span = span(0, overlapPoint - 1);
+        spanOnParent = span(other->lowerLimitOnParent(), overlapPointOnParent - 1);
     }
 
-    pointSup = other->lowerLimitOnParent() + pointSub;
+    double shiftDOS = m_DOS(overlapPointOnParent)/other->DOS(overlapPoint);
 
-    double shiftSubSup = m_DOS(pointSup)/other->DOS(pointSub);
+    m_DOS(spanOnParent) = shiftDOS*other->DOS()(_span);
 
-    m_DOS(span(repl_l, repl_u - 1)) = shiftSubSup*other->DOS()(span(repl_l - other->lowerLimitOnParent(), repl_u - other->lowerLimitOnParent() - 1));
+    normaliseDOS();
 
+}
 
-    cout << "merged " << other->lowerLimitOnParent() << " " << other->upperLimitOnParent() << " with shift on " << shiftSubSup << endl;
+uint Window::getOverlapPoint(const Window *other)
+{
+    uint init;
+    int bin;
 
-    double shiftVisit = meanVisitAtFlatArea/other->getMeanFlatness();
-
-    for (uint i = 0; i < other->nbins(); ++i)
+    if (other->overlapsAtBottom())
     {
-        if (!other->isUnsetCount(i) || isUnsetCount(other->lowerLimitOnParent() + i))
+        init = (m_flatAreaUpper + other->lowerLimitOnParent())/2;
+    }
+
+    else
+    {
+        init = (m_flatAreaLower + other->upperLimitOnParent())/2;
+    }
+
+    bin = init;
+
+    while (isDeflatedBin(bin) || other->isDeflatedBin(bin - other->lowerLimitOnParent()))
+    {
+
+        if (other->overlapsAtBottom())
         {
-            m_visitCounts(other->lowerLimitOnParent() + i) = other->visitCounts(i)*shiftVisit;
+
+            bin++;
+
+            if (bin >= signed(other->upperLimitOnParent()))
+            {
+                m_DOS(span(init, other->upperLimitOnParent() - 1)).zeros();
+                return m_unsetCount;
+            }
+
         }
+
+        else
+        {
+            bin--;
+
+            if (bin < signed(other->lowerLimitOnParent()))
+            {
+                m_DOS(span(other->lowerLimitOnParent(), init - 1)).zeros();
+                return m_unsetCount;
+            }
+
+        }
+
     }
+
+    return bin;
 
 }
 
-uint Window::topIncrement(const uint upperLimit) const
-{
-    uint newTop = upperLimit + m_system->windowIncrementSize();
-
-    if (newTop > m_nbins)
-    {
-        return m_nbins;
-    }
-
-    else
-    {
-        return newTop;
-    }
-
-}
-
-uint Window::bottomIncrement(const uint lowerLimit) const
-{
-    if (lowerLimit < m_system->windowIncrementSize())
-    {
-        return 0;
-    }
-
-    else
-    {
-        return lowerLimit - m_system->windowIncrementSize();
-    }
-
-}
-
-void Window::tmp_output(const uint lowerLimitFlat, const uint upperLimitFlat, const vector<WindowParams> &roughAreas) const
+void Window::dump_output() const
 {
 
+    ofstream fFlat;
+    fFlat.open(m_system->path() + "/flatness.txt");
+
+    fFlat << m_flatAreaLower << " " << m_flatAreaUpper << endl;
+
+    fFlat.close();
+
+    ofstream fRough;
+    fRough.open(m_system->path() + "/roughness.txt");
+    for (const Window *subWindow: m_subWindows)
+    {
+        fRough << subWindow->lowerLimitOnParent() << " " << subWindow->upperLimitOnParent() << endl;
+    }
+    fRough.close();
+
+
+    stringstream file;
+    file << m_system->path()  << "/stateDensity" << m_system->nParticles() << ".arma";
+    vec E = linspace<vec>(m_minValue, m_maxValue, m_nbins);
+
+    uvec indices = find(m_visitCounts != m_unsetCount);
+    uvec vc = m_visitCounts(indices);
+
+    vec dos = m_DOS(indices);
+    vec e = E(indices);
+    vec idx = conv_to<vec>::from(indices);
+    vec vcd = conv_to<vec>::from(vc);
+
+    if (!join_rows(join_rows(join_rows(e, dos), vcd), idx).eval().save(file.str()))
+    {
+        cout << "failed at storing " << file.str() << endl;
+    }
 }

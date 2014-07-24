@@ -27,16 +27,17 @@ public:
 
     Window(System *system,
            const vec &parentDOS,
-           const vec &parentEnergies,
-           const uint lowerLimit,
-           const uint upperLimit,
-           const uint overlapPoint,
-           Window::OverlapTypes overlapType, bool allowSubwindowing);
+           const vec &parentEnergies, const vector<bool> &parentBinDeflation,
+           const uint lowerLimitOnParent,
+           const uint upperLimitOnParent,
+           Window::OverlapTypes overlapType,
+           bool allowSubwindowing);
 
     Window(System *system,
            const uint nBins,
            const double minValue,
-           const double maxValue, bool allowSubwindowing);
+           const double maxValue,
+           bool allowSubwindowing);
 
     Window(const Window &parentWindow, const WindowParams &windowParams);
 
@@ -51,6 +52,11 @@ public:
     void calculateWindow();
 
     double estimateFlatness(const uint lowerLimit, const uint upperLimit) const;
+
+    double estimateFlatness() const
+    {
+        return estimateFlatness(0, m_nbins);
+    }
 
     void findSubWindows();
 
@@ -67,6 +73,8 @@ public:
 
     bool scanForFlattestArea();
 
+    double sparsity(const uint lowerLimit, const uint upperLimit) const;
+
     void expandFlattestArea();
 
     bool flatProfileIsContinousOnParent() const;
@@ -80,11 +88,11 @@ public:
 
     void reset();
 
+    void resetDOS();
+
     bool allowsSubwindowing() const;
 
-    bool flatAreaIsInsufficient() const;
-
-    bool flatAreaIsDominant() const;
+    bool flatspanGradientConverged() const;
 
     bool isLegal(const double value) const
     {
@@ -151,6 +159,16 @@ public:
         return m_visitCounts(i);
     }
 
+    const vector<bool> &deflatedBins() const
+    {
+        return m_deflatedBins;
+    }
+
+    bool isDeflatedBin(const uint bin) const
+    {
+        return m_deflatedBins.at(bin);
+    }
+
     const uint &nbins() const
     {
         return m_nbins;
@@ -168,9 +186,21 @@ public:
         return isFlat(0, m_nbins);
     }
 
-    const Window::OverlapTypes &overlapType()
+    bool isFlatOnParent() const;
+
+    const Window::OverlapTypes &overlapType() const
     {
         return m_overlapType;
+    }
+
+    bool overlapsAtTop() const
+    {
+        return m_overlapType == OverlapTypes::Upper;
+    }
+
+    bool overlapsAtBottom() const
+    {
+        return m_overlapType == OverlapTypes::Lower;
     }
 
     static constexpr uint m_unsetCount = std::numeric_limits<uint>::max();
@@ -182,7 +212,6 @@ private:
     vector<Window*> m_subWindows;
     bool m_allowsSubwindowing;
 
-    const uint m_overlapPoint;
     const Window::OverlapTypes m_overlapType;
 
     uint m_lowerLimitOnParent;
@@ -200,13 +229,35 @@ private:
     uint m_flatAreaLower;
     uint m_flatAreaUpper;
 
+    uint m_gradientSampleCounter;
+
+    double m_spanSum;
+    vec4 m_spanSums;
+    double m_spanGradient;
+    double m_spanLaplace;    
+
+    double m_centerSum;
+    vec4 m_centerSums;
+    double m_centerGradient;
+
+    vector<bool> m_deflatedBins;
+
+    uint m_outputLevel;
+
+    void deflateDOS();
+
+    void normaliseDOS()
+    {
+        m_DOS = normalise(m_DOS);
+
+        deflateDOS();
+    }
+
     void mergeWith(Window *other);
 
-    uint topIncrement(const uint upperLimit) const;
+    uint getOverlapPoint(const Window *other);
 
-    uint bottomIncrement(const uint lowerLimit) const;
-
-    void tmp_output(const uint lowerLimitFlat, const uint upperLimitFlat, const vector<WindowParams> &roughAreas) const;
+    void dump_output() const;
 
 };
 
