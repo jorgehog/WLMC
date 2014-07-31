@@ -13,3 +13,9 @@ SOURCES += window.cpp \
 HEADERS += window.h \
     system.h \
     windowparams.h
+
+QMAKE_PRE_LINK += $(MKDIR) $$PWD/../lib $$shadowed($$PWD)/../lib
+
+!equals(PWD, $${OUT_PWD}) {
+    QMAKE_POST_LINK += $(COPY_DIR) $$OUT_PWD/../lib $$PWD/../
+}
