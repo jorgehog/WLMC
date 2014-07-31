@@ -398,7 +398,7 @@ bool Window::scanForFlattestArea()
 
     double maxFn = unsetFn;
 
-    const double maximalSparsity = 0.5;
+    const double maximalSparsity = 0.75;
 
     while (upperLimitScan < m_nbins)
     {
@@ -593,7 +593,7 @@ void Window::reset()
 
 void Window::deflateDOS()
 {
-    double eps = 1E-16;
+    double eps = 1E-100;
     for (uint bin = 0; bin < m_nbins; ++bin)
     {
 
@@ -604,9 +604,7 @@ void Window::deflateDOS()
 
         else if (m_DOS(bin) < eps)
         {
-            m_visitCounts(bin) = m_unsetCount;
-            m_DOS(bin) = 0;
-            m_deflatedBins.at(bin) = true;
+            deflateBin(bin);
         }
     }
 }
@@ -772,6 +770,7 @@ void Window::dump_output() const
     vec E = linspace<vec>(m_minValue, m_maxValue, m_nbins);
 
     uvec indices = find(m_visitCounts != m_unsetCount);
+
     uvec vc = m_visitCounts(indices);
 
     vec dos = m_DOS(indices);

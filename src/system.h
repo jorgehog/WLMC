@@ -26,23 +26,31 @@ public:
            const string path,
            function<double()> URNG);
 
+    virtual void setMaximumConfiguration();
+
+    virtual void setMinimumConfiguration();
+
     virtual bool isOccupiedLoction(const uint x, const uint y, const uint z) const = 0;
 
     virtual double getValue(const uint particleIndex) const = 0;
 
-    virtual double getValueDifference(const uint particleIndex, const uint xd, const uint yd, const uint zd) const = 0;
+    virtual double getValueDifference(const uint particleIndex, const uint xd, const uint yd, const uint zd);
 
-    virtual double getTotalValue() const = 0;
+    virtual double getTotalValue() const;
 
     virtual void changePosition(const uint particleIndex, const uint xd, const uint yd, const uint zd) = 0;
 
     virtual void getPosition(const uint particleIndex, uint &x, uint &y, uint &z) const = 0;
 
-    void execute(const uint nbins, const double adaptive, const double fStart, const double fEnd, function<double(double)> reduceFunction);
+    virtual void savePositionData(const uint framenumber) const;
 
-    void execute(const uint nbins, const double adaptive, const double fStart, const double fEnd)
+    void consistencyCheckOptimizedValues();
+
+    Window *execute(const uint nbins, const double adaptive, const double fStart, const double fEnd, function<double(double)> reduceFunction);
+
+    Window *execute(const uint nbins, const double adaptive, const double fStart, const double fEnd)
     {
-        execute(nbins, adaptive, fStart, fEnd, [] (double pre) {return sqrt(pre);});
+        return execute(nbins, adaptive, fStart, fEnd, [] (double pre) {return sqrt(pre);});
     }
 
     void sampleWindow(Window *window);
@@ -55,9 +63,11 @@ public:
 
     void locateGlobalExtremaValues(double &min, double &max);
 
-    void setupPresetWindowConfigurations(const Window &mainWindow);
+    void setupPresetWindowConfigurations(Window &mainWindow);
 
     void loadConfigurationForWindow(const Window *window);
+
+    void loadConfiguration(const umat &config);
 
     uint getPresetBinFromValue(const double value) const;
 
@@ -130,14 +140,17 @@ private:
     ucube m_presetWindowConfigurations;
     vec m_presetWindowValues;
 
-    umat m_presetMinimum;
-    umat m_presetMaximum;
-
     double getGlobalExtremum(const extrema type);
 
     void getRandomParticleAndDestination(uint &particleIndex, uint &xd, uint &yd, uint &zd) const;
 
     void randomizeParticlePositions();
+
+protected:
+
+    umat m_presetMinimum;
+    umat m_presetMaximum;
+
 
 };
 

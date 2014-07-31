@@ -1,3 +1,6 @@
 [submodule "utils/BADAss"]
 	path = utils/BADAss
 	url = https://github.com/jorgehog/BADAss
+[submodule "utils/lammpswriter"]
+	path = utils/lammpswriter
+	url = https://github.com/jorgehog/lammpswriter

@@ -90,6 +90,14 @@ public:
 
     void resetDOS();
 
+    void deflateBin(const uint bin)
+    {
+        cout << "deflated " << bin << " " << DOS(bin) << endl;
+        m_visitCounts(bin) = m_unsetCount;
+        m_DOS(bin) = 0;
+        m_deflatedBins.at(bin) = true;
+    }
+
     bool allowsSubwindowing() const;
 
     bool flatspanGradientConverged() const;
