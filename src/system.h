@@ -26,6 +26,8 @@ public:
            const string path,
            function<double()> URNG);
 
+    virtual ~System() {}
+
     virtual void setMaximumConfiguration();
 
     virtual void setMinimumConfiguration();
