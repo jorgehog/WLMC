@@ -49,7 +49,7 @@ void System::setMaximumConfiguration()
     double max = std::numeric_limits<double>::min();
 
     sweep = 0;
-    nSweeps = 100;
+    nSweeps = 10;
 
     while (sweep < nSweeps)
     {
@@ -101,7 +101,7 @@ void System::setMinimumConfiguration()
 
     double min = std::numeric_limits<double>::max();
 
-    nSweeps = 100;
+    nSweeps = 10;
     sweep = 0;
 
     while (sweep < nSweeps)
@@ -448,6 +448,7 @@ void System::setupPresetWindowConfigurations(Window &mainWindow)
         }
 
         binSet(bin) = 1;
+	nTest = 0;
 
         for (uint particleIndex = 0; particleIndex < m_nParticles; ++particleIndex)
         {
