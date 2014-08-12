@@ -15,6 +15,7 @@ System::System(const uint nParticles,
                const double flatnessCriterion,
                const uint overlap,
                const uint minWindowSizeRough,
+               const double flatnessGradientTreshold,
                const string path,
                function<double()> URNG) :
     m_nParticles(nParticles),
@@ -27,6 +28,7 @@ System::System(const uint nParticles,
     m_flatnessCriterion(flatnessCriterion),
     m_overlap(overlap),
     m_minWindowSize(minWindowSizeRough),
+    m_flatnessGradientTreshold(flatnessGradientTreshold),
     m_URNG(URNG),
     m_path(path)
 {

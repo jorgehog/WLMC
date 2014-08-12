@@ -23,6 +23,7 @@ public:
            const double flatnessCriterion,
            const uint overlap,
            const uint minWindowSize,
+           const double flatnessGradientTreshold,
            const string path,
            function<double()> URNG);
 
@@ -132,6 +133,8 @@ private:
     const double m_flatnessCriterion;
     const uint m_overlap;
     const uint m_minWindowSize;
+
+    const double m_flatnessGradientTreshold;
 
     double m_f;
 

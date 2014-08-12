@@ -643,10 +643,6 @@ bool Window::flatspanGradientConverged() const
 
     const double lim = 0.1;
 
-    //    cout << "CG " << m_centerGradient << endl;
-    //    cout << "SG " << m_spanGradient << endl;
-    //    cout << "SL " << m_spanLaplace << endl;
-
     return m_spanLaplace <= 0  && fabs(m_spanGradient) < lim && fabs(m_centerGradient) < lim;
 }
 
@@ -677,7 +673,8 @@ bool Window::atBoundaryValue() const
     return atBoundaryValue(dummy);
 }
 
-bool Window::atBoundaryValue(double &boundaryValue) const
+bool Window::
+atBoundaryValue(double &boundaryValue) const
 {
     double value = m_system->getTotalValue();
 
