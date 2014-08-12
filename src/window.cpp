@@ -136,6 +136,14 @@ vec Window::getHistogram(const uint nmoves)
 void Window::loadInitialConfig()
 {
     m_system->loadConfigurationForWindow(this);
+
+    BADAssBool(isLegal(m_system->getTotalValue()) || atBoundaryValue(),
+               "Loaded configuration is outside the windowed values.",
+               [this] ()
+    {
+        cout << m_minValue << " " << m_maxValue << endl;
+        cout << m_system->getTotalValue() << endl;
+    });
 }
 
 void Window::calculateWindow()
@@ -553,15 +561,20 @@ void Window::registerVisit(const uint bin)
 
 uint Window::getBin(double value) const
 {
-    BADAss(value, >=, m_minValue, "Illegal low end bin.", [&] ()
+    if (!isLegal(value))
     {
-        cout << value << " " << m_minValue << endl;
-    });
+        double boundaryValue;
 
-    BADAss(value, <=, m_maxValue, "Illegal high end bin.", [&] ()
-    {
-        cout << value << " " << m_minValue << endl;
-    });
+        if (atBoundaryValue(boundaryValue))
+        {
+            value = boundaryValue;
+        }
+        else
+        {
+            BADAssBreak("Error in bin selection.");
+            throw std::runtime_error("Error in bin selection.");
+        }
+    }
 
     uint bin = m_nbins*(value - m_minValue)/m_valueSpan;
 
@@ -630,9 +643,9 @@ bool Window::flatspanGradientConverged() const
 
     const double lim = 0.1;
 
-//    cout << "CG " << m_centerGradient << endl;
-//    cout << "SG " << m_spanGradient << endl;
-//    cout << "SL " << m_spanLaplace << endl;
+    //    cout << "CG " << m_centerGradient << endl;
+    //    cout << "SG " << m_spanGradient << endl;
+    //    cout << "SL " << m_spanLaplace << endl;
 
     return m_spanLaplace <= 0  && fabs(m_spanGradient) < lim && fabs(m_centerGradient) < lim;
 }
@@ -660,6 +673,12 @@ bool Window::isFlatOnParent() const
 
 bool Window::atBoundaryValue() const
 {
+    double dummy;
+    return atBoundaryValue(dummy);
+}
+
+bool Window::atBoundaryValue(double &boundaryValue) const
+{
     double value = m_system->getTotalValue();
 
     double minDistance2 = (value - m_minValue)*(value - m_minValue);
@@ -672,10 +691,14 @@ bool Window::atBoundaryValue() const
     //this means that the value is closer to the top.
     if (maxDistance2 < minDistance2)
     {
+        boundaryValue = m_maxValue;
+
         return maxDistance2 < delta;
     }
     else
     {
+        boundaryValue = m_minValue;
+
         return minDistance2 < delta;
     }
 }

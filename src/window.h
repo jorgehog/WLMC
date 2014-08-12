@@ -213,6 +213,8 @@ public:
 
     bool atBoundaryValue() const;
 
+    bool atBoundaryValue(double &boundaryValue) const;
+
     static constexpr uint m_unsetCount = std::numeric_limits<uint>::max();
 
 private:
