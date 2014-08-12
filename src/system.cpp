@@ -241,7 +241,7 @@ Window *System::execute(const uint nbins, const double adaptive, const double fS
     locateGlobalExtremaValues(min, max);
 
     Window *mainWindow = new Window(this, nbins, min, max, adaptive);
-//    clipWindow(*mainWindow);
+    //    clipWindow(*mainWindow);
 
     setupPresetWindowConfigurations(*mainWindow);
 
@@ -300,7 +300,7 @@ bool System::doWLMCMove(Window *window)
     double oldDOS = window->DOS(oldBin);
     double newDOS = window->DOS(newBin);
 
-    BADAss(newDOS, >, 1E-16);
+    BADAss(newDOS, !=, 0);
 
     bool accepted = true;
 
@@ -377,6 +377,8 @@ void System::locateGlobalExtremaValues(double &min, double &max)
     loadConfiguration(m_presetMaximum);
     savePositionData(1);
     max = getTotalValue();
+
+    cout << "located extrema " << min << " " << max << endl;
 }
 
 void System::setupPresetWindowConfigurations(Window &mainWindow)
@@ -404,6 +406,9 @@ void System::setupPresetWindowConfigurations(Window &mainWindow)
 
     uint nMax = 10000;
     uint nTest = 0;
+
+    double spaciousness = 10;
+
     while (nSet < n)
     {
         doRandomMove();
@@ -430,11 +435,12 @@ void System::setupPresetWindowConfigurations(Window &mainWindow)
                 }
             }
 
-           return;
+            return;
         }
 
         value = getTotalValue();
 
+        //Just in case the extrema calculations went bad
         if (value < min || value > max)
         {
             continue;
@@ -442,13 +448,20 @@ void System::setupPresetWindowConfigurations(Window &mainWindow)
 
         bin = getPresetBinFromValue(value);
 
-        if (binSet(bin) != 0)
+        double mmin = m_presetWindowValues(bin);
+        double mmax = m_presetWindowValues(bin + 1);
+
+        double delta = (mmax - mmin)/spaciousness;
+
+        bool valueIsTooCloseToBoundary = value < mmin + delta || value > mmax - delta;
+
+        if (binSet(bin) != 0 || valueIsTooCloseToBoundary)
         {
             continue;
         }
 
         binSet(bin) = 1;
-	nTest = 0;
+        nTest = 0;
 
         for (uint particleIndex = 0; particleIndex < m_nParticles; ++particleIndex)
         {
@@ -513,10 +526,10 @@ void System::loadConfiguration(const umat &config)
 
         if (!isAlreadyOccupied)
         {
-            BADAssBool(!isOccupiedLoction(xAvailable, yAvailable, zAvailable), "Error: Site should be available.", badass::quickie([&] ()
+            BADAssBool(!isOccupiedLoction(xAvailable, yAvailable, zAvailable), "Error: Site should be available.", [&] ()
             {
                 cout << xAvailable << " " << yAvailable << " " << zAvailable << endl;
-            }));
+            });
             changePosition(particleIndex, xAvailable, yAvailable, zAvailable);
         }
     }

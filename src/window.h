@@ -211,6 +211,8 @@ public:
         return m_overlapType == OverlapTypes::Lower;
     }
 
+    bool atBoundaryValue() const;
+
     static constexpr uint m_unsetCount = std::numeric_limits<uint>::max();
 
 private:

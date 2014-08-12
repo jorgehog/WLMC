@@ -2,6 +2,8 @@
 #include "system.h"
 #include "windowparams.h"
 
+#include <iomanip>
+
 #include <BADAss/badass.h>
 
 using namespace WLMC;
@@ -134,24 +136,14 @@ vec Window::getHistogram(const uint nmoves)
 void Window::loadInitialConfig()
 {
     m_system->loadConfigurationForWindow(this);
-
-    BADAssBool(isLegal(m_system->getTotalValue()),
-               "Loaded configuration is outside the windowed values.",
-               badass::quickie([this] ()
-    {
-        cout << m_minValue << " " << m_maxValue << endl;
-        cout << m_system->getTotalValue() << endl;
-    }
-    )
-               );
 }
 
 void Window::calculateWindow()
 {
-    BADAssBool(isLegal(m_system->getTotalValue()), "Initigal configuration is illegal.", badass::quickie([&] ()
+    BADAssBool(isLegal(m_system->getTotalValue()) || atBoundaryValue(), "Initial configuration is illegal.", [&] ()
     {
         cout << m_minValue << " " << m_maxValue << " " << m_system->getTotalValue() << endl;
-    }));
+    });
 
     cout << "sampling on " << m_lowerLimitOnParent << " " << m_upperLimitOnParent << " f = " << m_system->f() << endl;
 
@@ -561,6 +553,16 @@ void Window::registerVisit(const uint bin)
 
 uint Window::getBin(double value) const
 {
+    BADAss(value, >=, m_minValue, "Illegal low end bin.", [&] ()
+    {
+        cout << value << " " << m_minValue << endl;
+    });
+
+    BADAss(value, <=, m_maxValue, "Illegal high end bin.", [&] ()
+    {
+        cout << value << " " << m_minValue << endl;
+    });
+
     uint bin = m_nbins*(value - m_minValue)/m_valueSpan;
 
     if (bin == m_nbins)
@@ -653,6 +655,28 @@ bool Window::isFlatOnParent() const
     else
     {
         return isFlat();
+    }
+}
+
+bool Window::atBoundaryValue() const
+{
+    double value = m_system->getTotalValue();
+
+    double minDistance2 = (value - m_minValue)*(value - m_minValue);
+    double maxDistance2 = (value - m_maxValue)*(value - m_maxValue);
+
+    double spaciousness = 0.01;
+
+    double delta = (spaciousness*spaciousness*m_valueSpan*m_valueSpan);
+
+    //this means that the value is closer to the top.
+    if (maxDistance2 < minDistance2)
+    {
+        return maxDistance2 < delta;
+    }
+    else
+    {
+        return minDistance2 < delta;
     }
 }
 
