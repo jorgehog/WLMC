@@ -211,6 +211,8 @@ public:
         return m_overlapType == OverlapTypes::Lower;
     }
 
+    void dump_output() const;
+
     bool atBoundaryValue() const;
 
     bool atBoundaryValue(double &boundaryValue) const;
@@ -268,8 +270,6 @@ private:
     void mergeWith(Window *other);
 
     uint getOverlapPoint(const Window *other);
-
-    void dump_output() const;
 
 };
 

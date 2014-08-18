@@ -16,6 +16,7 @@ System::System(const uint nParticles,
                const uint overlap,
                const uint minWindowSizeRough,
                const double flatnessGradientTreshold,
+               const double deflationLimit,
                const string path,
                function<double()> URNG) :
     m_nParticles(nParticles),
@@ -29,6 +30,7 @@ System::System(const uint nParticles,
     m_overlap(overlap),
     m_minWindowSize(minWindowSizeRough),
     m_flatnessGradientTreshold(flatnessGradientTreshold),
+    m_deflationLimit(deflationLimit),
     m_URNG(URNG),
     m_path(path)
 {
@@ -256,6 +258,8 @@ Window *System::execute(const uint nbins, const double adaptive, const double fS
 
         mainWindow->reset();
     }
+
+    mainWindow->dump_output();
 
     return mainWindow;
 

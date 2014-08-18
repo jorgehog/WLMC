@@ -254,7 +254,7 @@ void Window::findSubWindows()
 
     else if (!flatProfileIsContinousOnParent())
     {
-        if (m_outputLevel != 3) cout << "subwindowing: flat area not contonous on parent." << endl;
+        if (m_outputLevel != 3) cout << "subwindowing: flat area not continous on parent." << endl;
 
         m_outputLevel = 3;
 
@@ -608,7 +608,23 @@ void Window::reset()
 
 void Window::deflateDOS()
 {
-    double eps = 1E-100;
+    double mean = 0;
+    uint count = 0;
+
+    for (uint bin = 0; bin < m_nbins; ++bin)
+    {
+        mean += m_DOS(bin);
+
+        if (isDeflatedBin(bin))
+        {
+            continue;
+        }
+
+        count++;
+    }
+
+    mean /= count;
+
     for (uint bin = 0; bin < m_nbins; ++bin)
     {
 
@@ -617,7 +633,7 @@ void Window::deflateDOS()
             continue;
         }
 
-        else if (m_DOS(bin) < eps)
+        else if (m_DOS(bin)/mean < m_system->deflationLimit())
         {
             deflateBin(bin);
         }
@@ -816,6 +832,15 @@ void Window::dump_output() const
     uvec indices = find(m_visitCounts != m_unsetCount);
 
     uvec vc = m_visitCounts(indices);
+
+    for (const uint & i : indices)
+    {
+        if (isDeflatedBin(i))
+        {
+            cout << "FAIL FAIL FAIl" << endl;
+            exit(1);
+        }
+    }
 
     vec dos = m_DOS(indices);
     vec e = E(indices);

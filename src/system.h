@@ -24,6 +24,7 @@ public:
            const uint overlap,
            const uint minWindowSize,
            const double flatnessGradientTreshold,
+           const double deflationLimit,
            const string path,
            function<double()> URNG);
 
@@ -91,6 +92,11 @@ public:
         return m_flatnessCriterion;
     }
 
+    const double &deflationLimit() const
+    {
+        return m_deflationLimit;
+    }
+
     const uint &overlap() const
     {
         return m_overlap;
@@ -131,6 +137,7 @@ private:
     const uint m_movesPerSampling;
 
     const double m_flatnessCriterion;
+    const double m_deflationLimit;
     const uint m_overlap;
     const uint m_minWindowSize;
 

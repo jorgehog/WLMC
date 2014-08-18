@@ -9,7 +9,7 @@ class ising2D : public WLMC::System
 public:
 
     ising2D(const uint NX, const uint NY, const uint Np, const uint overlap, const uint minWindowSize) :
-        WLMC::System(Np, NX, NY, 1, 2500, 0.85, overlap, minWindowSize, 1.0, ".", [] () {return randu(1, 1).eval()(0, 0);})
+        WLMC::System(Np, NX, NY, 1, 2500, 0.85, overlap, minWindowSize, 1.0, 1E-100, ".", [] () {return randu(1, 1).eval()(0, 0);})
     {
         m_lattice.set_size(NX, NY);
         m_lattice.zeros();
