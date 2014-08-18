@@ -75,7 +75,19 @@ public:
 
     uint getPresetBinFromValue(const double value) const;
 
+    void getRandomParticleAndDestination(uint &particleIndex, uint &xd, uint &yd, uint &zd) const;
+
     void clipWindow(Window &window) const;
+
+    double URNG() const
+    {
+        return m_URNG();
+    }
+
+    const uint &freeVolume() const
+    {
+        return m_freeVolume;
+    }
 
     const uint &nParticles() const
     {
@@ -153,8 +165,6 @@ private:
     vec m_presetWindowValues;
 
     double getGlobalExtremum(const extrema type);
-
-    void getRandomParticleAndDestination(uint &particleIndex, uint &xd, uint &yd, uint &zd) const;
 
     void randomizeParticlePositions();
 

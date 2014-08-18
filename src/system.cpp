@@ -27,17 +27,17 @@ System::System(const uint nParticles,
     m_freeVolume(m_volume - nParticles),
     m_movesPerSampling(movesPerSampling),
     m_flatnessCriterion(flatnessCriterion),
+    m_deflationLimit(deflationLimit),
     m_overlap(overlap),
     m_minWindowSize(minWindowSizeRough),
     m_flatnessGradientTreshold(flatnessGradientTreshold),
-    m_deflationLimit(deflationLimit),
     m_URNG(URNG),
     m_path(path)
 {
     m_presetMinimum.set_size(m_nParticles, 3);
     m_presetMaximum.set_size(m_nParticles, 3);
 
-    BADAss(nParticles, >=, 2, "Number of particles.");
+    BADAss(nParticles, >=, 1, "Number of particles.");
     BADAss(nParticles, <, m_volume, "Incorrect number of particles.");
 
 }
@@ -256,10 +256,10 @@ Window *System::execute(const uint nbins, const double adaptive, const double fS
 
         m_f = reduceFunction(m_f);
 
+        mainWindow->dump_output();
         mainWindow->reset();
     }
 
-    mainWindow->dump_output();
 
     return mainWindow;
 
@@ -370,15 +370,22 @@ void System::findDestination(const uint destination, uint &xd, uint &yd, uint &z
         }
     }
 
+    BADAssBreak("Unable to find destination", [&] ()
+    {
+        cout << "dest = " << destination << " freevolume = " << m_freeVolume << endl;
+    });
+
 }
 
 void System::locateGlobalExtremaValues(double &min, double &max)
 {
+    m_presetMinimum.zeros();
     setMinimumConfiguration();
     loadConfiguration(m_presetMinimum);
     savePositionData(0);
     min = getTotalValue();
 
+    m_presetMaximum.zeros();
     setMaximumConfiguration();
     loadConfiguration(m_presetMaximum);
     savePositionData(1);
@@ -535,6 +542,8 @@ void System::loadConfiguration(const umat &config)
             BADAssBool(!isOccupiedLoction(xAvailable, yAvailable, zAvailable), "Error: Site should be available.", [&] ()
             {
                 cout << xAvailable << " " << yAvailable << " " << zAvailable << endl;
+
+                cout << config << endl;
             });
             changePosition(particleIndex, xAvailable, yAvailable, zAvailable);
         }

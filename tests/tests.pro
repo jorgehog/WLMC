@@ -13,4 +13,8 @@ TARGET = tests
 SOURCES = testmain.cpp
 
 HEADERS += \
-    ising2d.h
+    ising2d.h \
+    harmosc.h
+
+INCLUDEPATH += /usr/include/python2.7
+LIBS += -lpython2.7
