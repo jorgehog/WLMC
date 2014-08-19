@@ -8,7 +8,7 @@ class HarmOsc : public WLMC::System
 public:
 
     HarmOsc(const uint N, const uint Np, const double xmax) :
-        WLMC::System(Np, N, 1, 1, 10000, 0.95, 5, 10, 1.0, 1E-10, ".", [] () {return randu(1, 1).eval()(0, 0);}),
+        WLMC::System(Np, N, 1, 1, 1000, 0.8, 5, 10, 1.0, 1E-10, ".", [] () {return randu(1, 1).eval()(0, 0);}),
         m_xmax(xmax)
     {
         m_lattice.set_size(N);

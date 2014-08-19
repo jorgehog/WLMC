@@ -92,9 +92,9 @@ public:
 
     void deflateBin(const uint bin)
     {
-        cout << "deflated " << bin << " " << DOS(bin) << endl;
+        cout << "deflated " << bin << " " << logDOS(bin) << endl;
         m_visitCounts(bin) = m_unsetCount;
-        m_DOS(bin) = 0;
+        m_logDOS(bin) = 0;
         m_deflatedBins.at(bin) = true;
     }
 
@@ -137,19 +137,19 @@ public:
         return m_system;
     }
 
-    const vec &DOS() const
+    const vec &logDOS() const
     {
-        return m_DOS;
+        return m_logDOS;
     }
 
-    const double &DOS(const uint i) const
+    const double &logDOS(const uint i) const
     {
-        return m_DOS(i);
+        return m_logDOS(i);
     }
 
-    void DOS(const vec newDOS)
+    void logDOS(const vec newLogDOS)
     {
-        m_DOS = newDOS;
+        m_logDOS = newLogDOS;
     }
 
     const vec &energies() const
@@ -236,7 +236,7 @@ private:
     double m_maxValue;
     double m_valueSpan;
 
-    vec m_DOS;
+    vec m_logDOS;
     vec m_energies;
     uvec m_visitCounts;
 
@@ -262,7 +262,7 @@ private:
 
     void normaliseDOS()
     {
-        m_DOS = normalise(m_DOS);
+        m_logDOS -= m_logDOS(0);
 
         deflateDOS();
     }

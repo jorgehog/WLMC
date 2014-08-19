@@ -26,7 +26,8 @@ public:
            const double flatnessGradientTreshold,
            const double deflationLimit,
            const string path,
-           function<double()> URNG);
+           function<double()> URNG,
+           bool requiresDestination = true);
 
     virtual ~System() {}
 
@@ -52,9 +53,9 @@ public:
 
     Window *execute(const uint nbins, const double adaptive, const double fStart, const double fEnd, function<double(double)> reduceFunction);
 
-    Window *execute(const uint nbins, const double adaptive, const double fStart, const double fEnd)
+    Window *execute(const uint nbins, const double adaptive, const double logfStart, const double logfEnd, const double logfReduceFactor = 0.5)
     {
-        return execute(nbins, adaptive, fStart, fEnd, [] (double pre) {return sqrt(pre);});
+        return execute(nbins, adaptive, logfStart, logfEnd, [&logfReduceFactor] (double pre) {return logfReduceFactor*pre;});
     }
 
     void sampleWindow(Window *window);
@@ -119,9 +120,9 @@ public:
         return m_minWindowSize;
     }
 
-    const double &f() const
+    const double &logf() const
     {
-        return m_f;
+        return m_logf;
     }
 
     const string path() const
@@ -155,11 +156,13 @@ private:
 
     const double m_flatnessGradientTreshold;
 
-    double m_f;
+    double m_logf;
 
     const function<double()> m_URNG;
 
     const string m_path;
+
+    const bool m_requiresDestination;
 
     ucube m_presetWindowConfigurations;
     vec m_presetWindowValues;
@@ -167,6 +170,7 @@ private:
     double getGlobalExtremum(const extrema type);
 
     void randomizeParticlePositions();
+
 
 protected:
 

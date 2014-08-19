@@ -25,7 +25,7 @@ Window::Window(System *system,
     m_minValue(parentEnergies(lowerLimitOnParent)),
     m_maxValue(parentEnergies(upperLimitOnParent - 1)),
     m_valueSpan(m_maxValue - m_minValue),
-    m_DOS(parentDOS(span(lowerLimitOnParent, upperLimitOnParent - 1))),
+    m_logDOS(parentDOS(span(lowerLimitOnParent, upperLimitOnParent - 1))),
     m_energies(parentEnergies(span(lowerLimitOnParent, upperLimitOnParent - 1))),
     m_visitCounts(uvec(m_nbins)),
     m_gradientSampleCounter(0),
@@ -64,7 +64,7 @@ Window::Window(System *system,
 
 Window::Window(const Window &parentWindow, const WindowParams &windowParams) :
     Window(parentWindow.system(),
-           parentWindow.DOS(),
+           parentWindow.logDOS(),
            parentWindow.energies(),
            parentWindow.deflatedBins(),
            windowParams.m_lowerLimit,
@@ -84,14 +84,14 @@ Window::~Window()
 
     m_subWindows.clear();
 
-    m_DOS.clear();
+    m_logDOS.clear();
     m_visitCounts.clear();
     m_system = NULL;
 }
 
 void Window::adapt(const uint lowerLimit, const uint upperLimit)
 {
-    m_DOS = m_DOS(span(lowerLimit, upperLimit - 1));
+    m_logDOS = m_logDOS(span(lowerLimit, upperLimit - 1));
     m_energies = m_energies(span(lowerLimit, upperLimit - 1));
     m_visitCounts = m_visitCounts(span(lowerLimit, upperLimit - 1));
 
@@ -153,7 +153,7 @@ void Window::calculateWindow()
         cout << m_minValue << " " << m_maxValue << " " << m_system->getTotalValue() << endl;
     });
 
-    cout << "sampling on " << m_lowerLimitOnParent << " " << m_upperLimitOnParent << " f = " << m_system->f() << endl;
+    cout << "sampling on " << m_lowerLimitOnParent << " " << m_upperLimitOnParent << " f = " << m_system->logf() << endl;
 
     //Need a method for saying that you are flat if flat on the area below overlap. Same goes for continuity.
     while (m_subWindows.empty() && !isFlatOnParent())
@@ -556,7 +556,7 @@ void Window::registerVisit(const uint bin)
         m_visitCounts(bin)++;
     }
 
-    m_DOS(bin) *= m_system->f();
+    m_logDOS(bin) += m_system->logf();
 }
 
 uint Window::getBin(double value) const
@@ -575,6 +575,19 @@ uint Window::getBin(double value) const
             throw std::runtime_error("Error in bin selection.");
         }
     }
+
+//    uint bfbin = 0;
+//    vec binEnergies = linspace(m_minValue, m_maxValue, m_nbins + 1);
+//    for (uint i = 0; i < m_nbins; ++i)
+//    {
+//        if (binEnergies(i) <= value && binEnergies(i + 1) >= value)
+//        {
+//            bfbin = i;
+//            break;
+//        }
+//    }
+
+//    return bfbin;
 
     uint bin = m_nbins*(value - m_minValue)/m_valueSpan;
 
@@ -608,41 +621,41 @@ void Window::reset()
 
 void Window::deflateDOS()
 {
-    double mean = 0;
-    uint count = 0;
+//    double mean = 0;
+//    uint count = 0;
 
-    for (uint bin = 0; bin < m_nbins; ++bin)
-    {
-        mean += m_DOS(bin);
+//    for (uint bin = 0; bin < m_nbins; ++bin)
+//    {
+//        mean += m_logDOS(bin);
 
-        if (isDeflatedBin(bin))
-        {
-            continue;
-        }
+//        if (isDeflatedBin(bin))
+//        {
+//            continue;
+//        }
 
-        count++;
-    }
+//        count++;
+//    }
 
-    mean /= count;
+//    mean /= count;
 
-    for (uint bin = 0; bin < m_nbins; ++bin)
-    {
+//    for (uint bin = 0; bin < m_nbins; ++bin)
+//    {
 
-        if (isDeflatedBin(bin))
-        {
-            continue;
-        }
+//        if (isDeflatedBin(bin))
+//        {
+//            continue;
+//        }
 
-        else if (m_DOS(bin)/mean < m_system->deflationLimit())
-        {
-            deflateBin(bin);
-        }
-    }
+//        else if (m_logDOS(bin)/mean < m_system->deflationLimit())
+//        {
+//            deflateBin(bin);
+//        }
+//    }
 }
 
 void Window::resetDOS()
 {
-    m_DOS.ones();
+    m_logDOS.ones();
 }
 
 bool Window::allowsSubwindowing() const
@@ -747,9 +760,9 @@ void Window::mergeWith(Window *other)
         spanOnParent = span(other->lowerLimitOnParent(), overlapPointOnParent - 1);
     }
 
-    double shiftDOS = m_DOS(overlapPointOnParent)/other->DOS(overlapPoint);
+    double shiftDOS = m_logDOS(overlapPointOnParent)/other->logDOS(overlapPoint);
 
-    m_DOS(spanOnParent) = shiftDOS*other->DOS()(_span);
+    m_logDOS(spanOnParent) = shiftDOS*other->logDOS()(_span);
 
     normaliseDOS();
 
@@ -782,7 +795,7 @@ uint Window::getOverlapPoint(const Window *other)
 
             if (bin >= signed(other->upperLimitOnParent()))
             {
-                m_DOS(span(init, other->upperLimitOnParent() - 1)).zeros();
+                m_logDOS(span(init, other->upperLimitOnParent() - 1)).zeros();
                 return m_unsetCount;
             }
 
@@ -794,7 +807,7 @@ uint Window::getOverlapPoint(const Window *other)
 
             if (bin < signed(other->lowerLimitOnParent()))
             {
-                m_DOS(span(other->lowerLimitOnParent(), init - 1)).zeros();
+                m_logDOS(span(other->lowerLimitOnParent(), init - 1)).zeros();
                 return m_unsetCount;
             }
 
@@ -842,7 +855,7 @@ void Window::dump_output() const
         }
     }
 
-    vec dos = m_DOS(indices);
+    vec dos = arma::exp(m_logDOS(indices));
     vec e = E(indices);
     vec idx = conv_to<vec>::from(indices);
     vec vcd = conv_to<vec>::from(vc);

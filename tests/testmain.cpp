@@ -5,17 +5,36 @@
 #include <sys/time.h>
 
 #include "harmosc.h"
-#include "ising2d.h"
+//#include "ising2d.h"
 
 #include <DCViz.h>
 
 #include <unittest++/UnitTest++.h>
 
+#include <iomanip>
+
 using namespace arma;
 using namespace std;
 
 WLMC::Window *harmosc();
-void ising();
+//void ising();
+
+TEST(HARMOSC)
+{
+    WLMC::Window * mainWindow = harmosc();
+
+    vec compareDOS = mainWindow->logDOS()/mainWindow->logDOS(1);
+
+    double overlap = 0;
+    for (uint bin = 2; bin < mainWindow->nbins(); ++bin)
+    {
+        overlap += fabs(compareDOS(bin) - 1/sqrt(bin));
+    }
+
+    overlap /= (mainWindow->nbins() - 2);
+
+    CHECK_CLOSE(overlap, 0, 0.1);
+}
 
 TEST(RNG_MEAN)
 {
@@ -67,8 +86,8 @@ TEST(dest)
 
 TEST(RNG)
 {
-    uint N = 1000;
-    uint Np = 10;
+    uint N = 100;
+    uint Np = 5;
     double xmax = 1.0;
 
     HarmOsc ho(N, Np, xmax);
@@ -127,57 +146,117 @@ TEST(RNG)
 
 TEST(bins)
 {
+
     using WLMC::Window;
 
-    double min = 0;
-    double max = 1000;
+    double min = 8;
+    double max = 1024;
 
-    uint nbins = 1000;
+    uint nbins = 1024;
 
-    HarmOsc ho(1, 10, 10);
+    HarmOsc ho(10, 1, 10);
+    cout << ho.URNG() << endl;
     Window w(&ho, nbins, min, max, false);
 
-    vec counts(nbins);
+    vec counts(nbins, fill::zeros);
+    vec counts2(nbins, fill::zeros);
 
-    double dv = 0.0001;
-    for (double value = min; value < max; value += dv)
+    double dv = 0.015625;
+    vec binEnergies = linspace(min, max, nbins + 1);
+
+    uint illegalCounter = 0;
+    uint wrongBinCounter = 0;
+    double deviate = 0;
+
+    for (double value = min; value <= max; value += dv)
     {
+
+        if (!w.isLegal(value))
+        {
+            illegalCounter++;
+        }
+
+        uint bfbin = 0;
+
+        if (value == max)
+        {
+            bfbin = nbins - 1;
+        }
+
+        else
+        {
+            for (uint i = 0; i < nbins; ++i)
+            {
+                if (binEnergies(i) <= value && binEnergies(i + 1) > value)
+                {
+                    bfbin = i;
+                    break;
+                }
+            }
+        }
+
         uint bin = w.getBin(value);
 
+        if (bin != bfbin)
+        {
+
+            wrongBinCounter++;
+            deviate += fabs(bin - bfbin);
+            cout << bin << " is not " << bfbin << " for value " << setprecision(16) << fixed << value
+                 << " " << setprecision(16) << binEnergies(bfbin) << " - " << setprecision(16) << binEnergies(bfbin + 1)
+                 << " | fail?: " <<  " " << setprecision(16) << binEnergies(bin) << " " << setprecision(16) << binEnergies(bin + 1) << endl;
+
+        }
         counts(bin)++;
 
     }
 
+    uint NC = 1E7;
+    for (uint i = 0; i < NC; ++i)
+    {
+        double value = min + (max - min)*ho.URNG();
+
+        uint bin = w.getBin(value);
+
+        counts2(bin)++;
+    }
+
+    CHECK_CLOSE(1, counts2.min()/mean(counts2), 0.05);
+
+    uvec indx = find(counts == 0);
+
+    CHECK_EQUAL(0, indx.size());
+
+    counts -= counts.min();
+
+    //    cout << sum(counts) << endl;
+    //    cout << int(sum(counts))%nbins << endl;
+    //    cout << find(counts == 2) << endl;
+    //    cout << find(counts == 0) << endl;
+    //    cout << size(find(counts == 1)) << endl;
+
+    if (wrongBinCounter != 0) deviate /= wrongBinCounter;
+
     double _mean = mean(counts);
+    uint meanDeviateCounter = 0;
     for (uint bin = 0; bin < nbins; ++bin)
     {
-        if (counts(bin) == 0)
+        if (fabs(_mean - counts(bin)) > 1E-3)
         {
-            cout << "zero bin" << bin << endl;
-            return;
+            meanDeviateCounter++;
         }
-        CHECK_CLOSE(_mean, counts(bin), 1);
     }
+
+    CHECK_EQUAL(0, illegalCounter);
+    CHECK_EQUAL(0, meanDeviateCounter);
+    CHECK_EQUAL(0, wrongBinCounter);
+    CHECK_CLOSE(0, arma::max(arma::abs(counts - _mean)), 1E-3);
+    CHECK_CLOSE(0, deviate, 1E-3);
 
 
 }
 
-//TEST(HARMOSC)
-//{
-//    WLMC::Window * mainWindow = harmosc();
 
-//    vec compareDOS = mainWindow->DOS()/mainWindow->DOS(1);
-
-//    double overlap = 0;
-//    for (uint bin = 2; bin < mainWindow->nbins(); ++bin)
-//    {
-//        overlap += fabs(compareDOS(bin) - 1/sqrt(bin));
-//    }
-
-//    overlap /= (mainWindow->nbins() - 2);
-
-//    CHECK_CLOSE(overlap, 0, 0.1);
-//}
 
 int main()
 {
@@ -188,12 +267,13 @@ int main()
 
 WLMC::Window *harmosc()
 {
-    uint nbins = 200;
 
     uint Np = 1;
-    uint N = 10000;
+    uint N = 20;
 
-    double xmax = 1000;
+    uint nbins = 400;
+
+    double xmax = 10;
 
     HarmOsc ho(N, Np, xmax);
 
@@ -203,83 +283,83 @@ WLMC::Window *harmosc()
     DCViz viz("stateDensity" + s.str() + ".arma");
     viz.launch(true, 0.1, 30, 30);
 
-    return ho.execute(nbins, 0, datum::e, 1 + 1E-6);
+    return ho.execute(nbins, 0, 1, 1E-4);
 
 }
 
-void ising()
-{
+//void ising()
+//{
 
-    uint nbins = 1000;
+//    uint nbins = 1000;
 
-    uint NX = 30;
-    uint NY = 30;
+//    uint NX = 30;
+//    uint NY = 30;
 
-    uint Np = NX*NY/2;
+//    uint Np = NX*NY/2;
 
-    uint overlap = 20;
-    uint minWindowSize = 100;
+//    uint overlap = 20;
+//    uint minWindowSize = 100;
 
-    ising2D system(NX, NY, Np, overlap, minWindowSize);
+//    ising2D system(NX, NY, Np, overlap, minWindowSize);
 
-    WLMC::Window *mainWindow = system.execute(nbins, 0, datum::e, 1 + 1E-6);
+//    WLMC::Window *mainWindow = system.execute(nbins, 0, datum::e, 1 + 1E-6);
 
-    vec E = mainWindow->energies();
-    vec DOS = mainWindow->DOS();
+//    vec E = mainWindow->energies();
+//    vec DOS = mainWindow->logDOS();
 
-    double T, dT;
-    uint N = 100000;
+//    double T, dT;
+//    uint N = 100000;
 
-    vec temperatures = linspace(0.1, 40.0, N);
-    dT = temperatures(1) - temperatures(0);
+//    vec temperatures = linspace(0.1, 40.0, N);
+//    dT = temperatures(1) - temperatures(0);
 
-    vec avgEs(N);
+//    vec avgEs(N);
 
-    double partitionFunc, avgE, pdf;
-    for (uint i = 0; i < N; ++i)
-    {
-        T = temperatures(i);
+//    double partitionFunc, avgE, pdf;
+//    for (uint i = 0; i < N; ++i)
+//    {
+//        T = temperatures(i);
 
-        partitionFunc = 0;
-        avgE = 0;
+//        partitionFunc = 0;
+//        avgE = 0;
 
-        for (uint bin = 0; bin < nbins; ++bin)
-        {
-            if (mainWindow->isDeflatedBin(bin))
-            {
-                continue;
-            }
+//        for (uint bin = 0; bin < nbins; ++bin)
+//        {
+//            if (mainWindow->isDeflatedBin(bin))
+//            {
+//                continue;
+//            }
 
-            pdf = DOS(bin)*exp(-E(bin)/T);
+//            pdf = DOS(bin)*exp(-E(bin)/T);
 
-            partitionFunc += pdf;
-            avgE += pdf*E(bin);
+//            partitionFunc += pdf;
+//            avgE += pdf*E(bin);
 
-        }
+//        }
 
-        avgE /= partitionFunc;
+//        avgE /= partitionFunc;
 
-        avgEs(i) = avgE;
+//        avgEs(i) = avgE;
 
-    }
+//    }
 
-    vec C(N, fill::zeros);
-    mat CT(N, 2);
+//    vec C(N, fill::zeros);
+//    mat CT(N, 2);
 
-    CT.col(1) = temperatures;
+//    CT.col(1) = temperatures;
 
 
-    for (uint i = 1; i < N - 1; ++i)
-    {
-        C(i) = (avgEs(i + 1) - avgEs(i - 1))/(2*dT);
-    }
+//    for (uint i = 1; i < N - 1; ++i)
+//    {
+//        C(i) = (avgEs(i + 1) - avgEs(i - 1))/(2*dT);
+//    }
 
-    CT.col(0) = C;
+//    CT.col(0) = C;
 
-    CT.save("CT.arma");
+//    CT.save("CT.arma");
 
-    cout << C.max()/mean(C)
-         << " at "
-         << temperatures(find(C == C.max()).eval()(0))
-         << endl;
-}
+//    cout << C.max()/mean(C)
+//         << " at "
+//         << temperatures(find(C == C.max()).eval()(0))
+//         << endl;
+//}

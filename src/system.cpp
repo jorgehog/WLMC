@@ -18,7 +18,8 @@ System::System(const uint nParticles,
                const double flatnessGradientTreshold,
                const double deflationLimit,
                const string path,
-               function<double()> URNG) :
+               function<double()> URNG,
+               bool requiresDestination) :
     m_nParticles(nParticles),
     m_NX(NX),
     m_NY(NY),
@@ -32,7 +33,8 @@ System::System(const uint nParticles,
     m_minWindowSize(minWindowSizeRough),
     m_flatnessGradientTreshold(flatnessGradientTreshold),
     m_URNG(URNG),
-    m_path(path)
+    m_path(path),
+    m_requiresDestination(requiresDestination)
 {
     m_presetMinimum.set_size(m_nParticles, 3);
     m_presetMaximum.set_size(m_nParticles, 3);
@@ -236,7 +238,7 @@ void System::consistencyCheckOptimizedValues()
 #endif
 }
 
-Window *System::execute(const uint nbins, const double adaptive, const double fStart, const double fEnd, function<double(double)> reduceFunction)
+Window *System::execute(const uint nbins, const double adaptive, const double logfStart, const double logfEnd, function<double(double)> reduceFunction)
 {
 
     consistencyCheckOptimizedValues();
@@ -249,12 +251,12 @@ Window *System::execute(const uint nbins, const double adaptive, const double fS
 
     setupPresetWindowConfigurations(*mainWindow);
 
-    m_f = fStart;
-    while (m_f >= fEnd)
+    m_logf = logfStart;
+    while (m_logf >= logfEnd)
     {
         mainWindow->calculateWindow();
 
-        m_f = reduceFunction(m_f);
+        m_logf = reduceFunction(m_logf);
 
         mainWindow->dump_output();
         mainWindow->reset();
@@ -303,16 +305,16 @@ bool System::doWLMCMove(Window *window)
     }
 
 
-    double oldDOS = window->DOS(oldBin);
-    double newDOS = window->DOS(newBin);
+    double oldLogDOS = window->logDOS(oldBin);
+    double newLogDOS = window->logDOS(newBin);
 
-    BADAss(newDOS, !=, 0);
+    BADAss(newLogDOS, !=, 0);
 
     bool accepted = true;
 
-    if (oldDOS < newDOS)
+    if (oldLogDOS < newLogDOS)
     {
-        accepted = (m_URNG() < oldDOS/newDOS);
+        accepted = (m_URNG() < exp(oldLogDOS - newLogDOS));
     }
 
     if (accepted)
@@ -711,6 +713,13 @@ double System::getGlobalExtremum(const System::extrema type)
 
 void System::getRandomParticleAndDestination(uint &particleIndex, uint &xd, uint &yd, uint &zd) const
 {
+    if (!m_requiresDestination)
+    {
+        particleIndex = m_URNG()*m_volume;
+        xd = yd = zd = 0;
+        return;
+    }
+
     particleIndex = m_URNG()*m_nParticles;
     uint destination = m_URNG()*m_freeVolume;
 
