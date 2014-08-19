@@ -308,8 +308,6 @@ bool System::doWLMCMove(Window *window)
     double oldLogDOS = window->logDOS(oldBin);
     double newLogDOS = window->logDOS(newBin);
 
-    BADAss(newLogDOS, !=, 0);
-
     bool accepted = true;
 
     if (oldLogDOS < newLogDOS)

@@ -94,7 +94,6 @@ public:
     {
         cout << "deflated " << bin << " " << logDOS(bin) << endl;
         m_visitCounts(bin) = m_unsetCount;
-        m_logDOS(bin) = 0;
         m_deflatedBins.at(bin) = true;
     }
 
@@ -125,6 +124,11 @@ public:
     const uint &lowerLimitOnParent() const
     {
         return m_lowerLimitOnParent;
+    }
+
+    void rofl(const uint p)
+    {
+        m_lowerLimitOnParent = m_upperLimitOnParent = p;
     }
 
     const uint &upperLimitOnParent() const
@@ -253,8 +257,8 @@ private:
     double m_centerSum;
     vec4 m_centerSums;
     double m_centerGradient;
-
     vector<bool> m_deflatedBins;
+
 
     uint m_outputLevel;
 
@@ -262,9 +266,10 @@ private:
 
     void normaliseDOS()
     {
-//        m_logDOS -= m_logDOS(0);
+        double m = m_logDOS.max();
+        m_logDOS -= m;
 
-//        deflateDOS();
+        deflateDOS();
     }
 
     void mergeWith(Window *other);

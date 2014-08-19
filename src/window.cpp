@@ -155,8 +155,11 @@ void Window::calculateWindow()
 
     cout << "sampling on " << m_lowerLimitOnParent << " " << m_upperLimitOnParent << " f = " << m_system->logf() << endl;
 
+    uint nMax = 100;
+    uint nAttempts = 0;
+
     //Need a method for saying that you are flat if flat on the area below overlap. Same goes for continuity.
-    while (m_subWindows.empty() && !isFlatOnParent())
+    while (m_subWindows.empty() && !isFlatOnParent() && nAttempts < nMax)
     {
 
         m_system->sampleWindow(this);
@@ -167,15 +170,12 @@ void Window::calculateWindow()
 
         dump_output();
 
-        //tmp
-        if (!m_subWindows.empty())
+        nAttempts++;
+
+        if (!m_allowsSubwindowing)
         {
-            for (Window *w: m_subWindows)
-            {
-                cout << "subWindow found at " << w->lowerLimitOnParent() << " " << w->upperLimitOnParent() << endl;
-            }
+            continue;
         }
-        //
 
         for (Window *subWindow : m_subWindows)
         {
@@ -359,8 +359,8 @@ bool Window::findFlatArea()
         m_centerSums(3) = m_centerSum/m_gradientSampleCounter;
         m_spanSums(3) = m_spanSum/m_gradientSampleCounter;
 
-        vec weightsDouble = {-1, 4, -5, 2};
-        vec weightsSingle = {0, 1.5, -3.0, 1.5};
+        const vec weightsDouble = {-1, 4, -5, 2};
+        const vec weightsSingle = {0, 1.5, -3.0, 1.5};
 
         m_centerGradient = 0;
         m_spanGradient = 0;
@@ -621,22 +621,6 @@ void Window::reset()
 
 void Window::deflateDOS()
 {
-//    double mean = 0;
-//    uint count = 0;
-
-//    for (uint bin = 0; bin < m_nbins; ++bin)
-//    {
-//        mean += m_logDOS(bin);
-
-//        if (isDeflatedBin(bin))
-//        {
-//            continue;
-//        }
-
-//        count++;
-//    }
-
-//    mean /= count;
 
     for (uint bin = 0; bin < m_nbins; ++bin)
     {
@@ -646,7 +630,6 @@ void Window::deflateDOS()
             continue;
         }
 
-//        cout << "asking bin " << bin << " getting " << fabs(m_logDOS(bin)/mean) << endl;
         if (m_logDOS(bin) < m_system->deflationLimit())
         {
             deflateBin(bin);
@@ -738,10 +721,6 @@ void Window::mergeWith(Window *other)
     span spanOnParent, _span;
     uint overlapPointOnParent, overlapPoint;
 
-    other->normaliseDOS();
-    normaliseDOS();
-
-
     overlapPointOnParent = getOverlapPoint(other);
     if (overlapPointOnParent == m_unsetCount)
     {
@@ -750,23 +729,54 @@ void Window::mergeWith(Window *other)
 
     overlapPoint = overlapPointOnParent - other->lowerLimitOnParent();
 
+    //    uint start, end;
+
     if (other->overlapsAtBottom())
     {
+        //        start = 0;
+        //        end = overlapPoint;
+
         _span = span(overlapPoint, other->nbins() - 1);
         spanOnParent = span(overlapPointOnParent, other->upperLimitOnParent() - 1);
     }
 
     else
     {
+        //        start = overlapPoint;
+        //        end = other->nbins() - 1;
+
         _span = span(0, overlapPoint - 1);
         spanOnParent = span(other->lowerLimitOnParent(), overlapPointOnParent - 1);
     }
 
-    double shiftDOS = m_logDOS(overlapPointOnParent)/other->logDOS(overlapPoint);
+    //    double shiftDOS = 0;
+    //    uint count = 0;
 
-    m_logDOS(spanOnParent) = shiftDOS*other->logDOS()(_span);
+    //    for (uint bin = start; bin < end; ++bin)
+    //    {
+    //        if (!isDeflatedBin(bin + other->lowerLimitOnParent()) && !other->isDeflatedBin(bin))
+    //        {
+    //            shiftDOS += m_logDOS(bin + other->lowerLimitOnParent()) - other->logDOS(bin);
+    //            count++;
+    //        }
+    //    }
+
+
+    //    if (count != 0)
+    //    {
+    //        shiftDOS /= count;
+    //    }
+
+
+    double shiftDOS = m_logDOS(overlapPointOnParent) - other->logDOS(overlapPoint);
+
+    m_logDOS(spanOnParent) = shiftDOS + other->logDOS()(_span);
 
     normaliseDOS();
+
+//    other->rofl(overlapPointOnParent);
+//    dump_output();
+//    sleep(3);
 
 }
 
@@ -786,8 +796,12 @@ uint Window::getOverlapPoint(const Window *other)
     }
 
     bin = init;
+    //    return bin;
 
-    while (isDeflatedBin(bin) || other->isDeflatedBin(bin - other->lowerLimitOnParent()))
+    while (isDeflatedBin(bin) ||
+           other->isDeflatedBin(bin - other->lowerLimitOnParent()) ||
+           m_logDOS(bin) == 0 ||
+           other->logDOS(bin - other->lowerLimitOnParent()) == 0)
     {
 
         if (other->overlapsAtBottom())
