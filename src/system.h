@@ -105,6 +105,11 @@ public:
         return m_flatnessCriterion;
     }
 
+    const double &flatnessGradientTreshold() const
+    {
+        return m_flatnessGradientTreshold;
+    }
+
     const double &deflationLimit() const
     {
         return m_deflationLimit;

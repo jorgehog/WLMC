@@ -9,7 +9,7 @@
 using namespace WLMC;
 
 Window::Window(System *system,
-               const vec &parentDOS,
+               const vec &parentLogDOS,
                const vec &parentEnergies,
                const vector<bool> &parentBinDeflation,
                const uint lowerLimitOnParent,
@@ -25,7 +25,7 @@ Window::Window(System *system,
     m_minValue(parentEnergies(lowerLimitOnParent)),
     m_maxValue(parentEnergies(upperLimitOnParent - 1)),
     m_valueSpan(m_maxValue - m_minValue),
-    m_logDOS(parentDOS(span(lowerLimitOnParent, upperLimitOnParent - 1))),
+    m_logDOS(parentLogDOS(span(lowerLimitOnParent, upperLimitOnParent - 1))),
     m_energies(parentEnergies(span(lowerLimitOnParent, upperLimitOnParent - 1))),
     m_visitCounts(uvec(m_nbins)),
     m_gradientSampleCounter(0),
@@ -51,7 +51,7 @@ Window::Window(System *system,
                const double maxValue,
                bool allowSubwindowing) :
     Window(system,
-           ones(nBins),
+           zeros(nBins),
            linspace(minValue, maxValue, nBins),
            vector<bool>(nBins, false),
            0,
@@ -576,18 +576,18 @@ uint Window::getBin(double value) const
         }
     }
 
-//    uint bfbin = 0;
-//    vec binEnergies = linspace(m_minValue, m_maxValue, m_nbins + 1);
-//    for (uint i = 0; i < m_nbins; ++i)
-//    {
-//        if (binEnergies(i) <= value && binEnergies(i + 1) >= value)
-//        {
-//            bfbin = i;
-//            break;
-//        }
-//    }
+    //    uint bfbin = 0;
+    //    vec binEnergies = linspace(m_minValue, m_maxValue, m_nbins + 1);
+    //    for (uint i = 0; i < m_nbins; ++i)
+    //    {
+    //        if (binEnergies(i) <= value && binEnergies(i + 1) >= value)
+    //        {
+    //            bfbin = i;
+    //            break;
+    //        }
+    //    }
 
-//    return bfbin;
+    //    return bfbin;
 
     uint bin = m_nbins*(value - m_minValue)/m_valueSpan;
 
@@ -638,19 +638,21 @@ void Window::deflateDOS()
 
 //    mean /= count;
 
-//    for (uint bin = 0; bin < m_nbins; ++bin)
-//    {
+    for (uint bin = 0; bin < m_nbins; ++bin)
+    {
 
-//        if (isDeflatedBin(bin))
-//        {
-//            continue;
-//        }
+        if (isDeflatedBin(bin))
+        {
+            continue;
+        }
 
-//        else if (m_logDOS(bin)/mean < m_system->deflationLimit())
-//        {
-//            deflateBin(bin);
-//        }
-//    }
+//        cout << "asking bin " << bin << " getting " << fabs(m_logDOS(bin)/mean) << endl;
+        if (m_logDOS(bin) < m_system->deflationLimit())
+        {
+            deflateBin(bin);
+        }
+
+    }
 }
 
 void Window::resetDOS()
@@ -670,7 +672,7 @@ bool Window::flatspanGradientConverged() const
         return false;
     }
 
-    const double lim = 0.1;
+    const double &lim = m_system->flatnessGradientTreshold();
 
     return m_spanLaplace <= 0  && fabs(m_spanGradient) < lim && fabs(m_centerGradient) < lim;
 }
@@ -855,7 +857,7 @@ void Window::dump_output() const
         }
     }
 
-    vec dos = arma::exp(m_logDOS(indices));
+    vec dos = m_logDOS(indices);
     vec e = E(indices);
     vec idx = conv_to<vec>::from(indices);
     vec vcd = conv_to<vec>::from(vc);

@@ -26,7 +26,7 @@ public:
     };
 
     Window(System *system,
-           const vec &parentDOS,
+           const vec &parentLogDOS,
            const vec &parentEnergies, const vector<bool> &parentBinDeflation,
            const uint lowerLimitOnParent,
            const uint upperLimitOnParent,
@@ -262,9 +262,9 @@ private:
 
     void normaliseDOS()
     {
-        m_logDOS -= m_logDOS(0);
+//        m_logDOS -= m_logDOS(0);
 
-        deflateDOS();
+//        deflateDOS();
     }
 
     void mergeWith(Window *other);
