@@ -7,7 +7,7 @@
 #include "harmosc.h"
 //#include "ising2d.h"
 
-#include <DCViz.h>
+#include <DCViz/include/DCViz.h>
 
 #include <unittest++/UnitTest++.h>
 

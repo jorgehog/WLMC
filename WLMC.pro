@@ -4,6 +4,6 @@ CONFIG -= app_bundle
 CONFIG -= qt
 CONFIG += ordered
 
-SUBDIRS += src tests
+SUBDIRS += utils src tests
 
 OTHER_FILES += include/WLMC.h $(HOME)/tmp/WLC/wl-w.c
