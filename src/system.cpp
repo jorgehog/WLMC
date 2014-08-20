@@ -2,6 +2,8 @@
 #include "window.h"
 #include "windowparams.h"
 
+#include <iomanip>
+
 #include <BADAss/badass.h>
 #include <lammpswriter/lammpswriter.h>
 
@@ -653,8 +655,11 @@ double System::getGlobalExtremum(const System::extrema type)
     }
 
     localExtrema = 1.0;
+    double ePrev;
     while (localExtrema != 0)
     {
+
+        ePrev = getTotalValue();
         localExtrema = 0;
 
         //Arrange particles by values
@@ -701,6 +706,11 @@ double System::getGlobalExtremum(const System::extrema type)
         else
         {
             changePosition(particleIndex, xd, yd, zd);
+
+            if (fabs(getTotalValue() - ePrev) < 1E-10)
+            {
+                break;
+            }
         }
 
     }

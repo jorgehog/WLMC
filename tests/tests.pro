@@ -16,5 +16,4 @@ HEADERS += \
     harmosc.h \
 #    ising2d.h \
 
-INCLUDEPATH += /usr/include/python2.7
-LIBS += -lpython2.7
+
