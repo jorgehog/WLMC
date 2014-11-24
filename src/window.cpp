@@ -141,8 +141,7 @@ void Window::loadInitialConfig()
                "Loaded configuration is outside the windowed values.",
                [this] ()
     {
-        cout << m_minValue << " " << m_maxValue << endl;
-        cout << m_system->getTotalValue() << endl;
+        BADAssSimpleDump(m_minValue, m_maxValue, m_system->getTotalValue());
     });
 }
 
@@ -150,7 +149,7 @@ void Window::calculateWindow()
 {
     BADAssBool(isLegal(m_system->getTotalValue()) || atBoundaryValue(), "Initial configuration is illegal.", [&] ()
     {
-        cout << m_minValue << " " << m_maxValue << " " << m_system->getTotalValue() << endl;
+        BADAssSimpleDump(m_minValue, m_maxValue, m_system->getTotalValue());
     });
 
     cout << "sampling on " << m_lowerLimitOnParent << " " << m_upperLimitOnParent << " f = " << m_system->logf() << endl;
@@ -576,19 +575,6 @@ uint Window::getBin(double value) const
         }
     }
 
-    //    uint bfbin = 0;
-    //    vec binEnergies = linspace(m_minValue, m_maxValue, m_nbins + 1);
-    //    for (uint i = 0; i < m_nbins; ++i)
-    //    {
-    //        if (binEnergies(i) <= value && binEnergies(i + 1) >= value)
-    //        {
-    //            bfbin = i;
-    //            break;
-    //        }
-    //    }
-
-    //    return bfbin;
-
     uint bin = m_nbins*(value - m_minValue)/m_valueSpan;
 
     if (bin == m_nbins)
@@ -617,6 +603,8 @@ void Window::reset()
     m_visitCounts.fill(m_unsetCount);
 
     m_outputLevel = 0;
+
+    m_system->onPresetLoad(0);
 }
 
 void Window::deflateDOS()
@@ -729,54 +717,22 @@ void Window::mergeWith(Window *other)
 
     overlapPoint = overlapPointOnParent - other->lowerLimitOnParent();
 
-    //    uint start, end;
-
     if (other->overlapsAtBottom())
     {
-        //        start = 0;
-        //        end = overlapPoint;
-
         _span = span(overlapPoint, other->nbins() - 1);
         spanOnParent = span(overlapPointOnParent, other->upperLimitOnParent() - 1);
     }
 
     else
     {
-        //        start = overlapPoint;
-        //        end = other->nbins() - 1;
-
         _span = span(0, overlapPoint - 1);
         spanOnParent = span(other->lowerLimitOnParent(), overlapPointOnParent - 1);
     }
 
-    //    double shiftDOS = 0;
-    //    uint count = 0;
-
-    //    for (uint bin = start; bin < end; ++bin)
-    //    {
-    //        if (!isDeflatedBin(bin + other->lowerLimitOnParent()) && !other->isDeflatedBin(bin))
-    //        {
-    //            shiftDOS += m_logDOS(bin + other->lowerLimitOnParent()) - other->logDOS(bin);
-    //            count++;
-    //        }
-    //    }
-
-
-    //    if (count != 0)
-    //    {
-    //        shiftDOS /= count;
-    //    }
-
-
     double shiftDOS = m_logDOS(overlapPointOnParent) - other->logDOS(overlapPoint);
-
-    m_logDOS(spanOnParent) = shiftDOS + other->logDOS()(_span);
+    m_logDOS(spanOnParent) = other->logDOS()(_span) + shiftDOS;
 
     normaliseDOS();
-
-//    other->rofl(overlapPointOnParent);
-//    dump_output();
-//    sleep(3);
 
 }
 
@@ -796,7 +752,6 @@ uint Window::getOverlapPoint(const Window *other)
     }
 
     bin = init;
-    //    return bin;
 
     while (isDeflatedBin(bin) ||
            other->isDeflatedBin(bin - other->lowerLimitOnParent()) ||
@@ -853,31 +808,29 @@ void Window::dump_output() const
     }
     fRough.close();
 
-
-    stringstream file;
-    file << m_system->path()  << "/stateDensity" << m_system->nParticles() << ".arma";
-    vec E = linspace<vec>(m_minValue, m_maxValue, m_nbins);
-
     uvec indices = find(m_visitCounts != m_unsetCount);
 
-    uvec vc = m_visitCounts(indices);
-
-    for (const uint & i : indices)
+    if (indices.size() < 3)
     {
-        if (isDeflatedBin(i))
-        {
-            cout << "FAIL FAIL FAIl" << endl;
-            exit(1);
-        }
+        return;
     }
+
+    vec E = linspace<vec>(m_minValue, m_maxValue, m_nbins);
+
+
+    uvec vc = m_visitCounts(indices);
 
     vec dos = m_logDOS(indices);
     vec e = E(indices);
     vec idx = conv_to<vec>::from(indices);
     vec vcd = conv_to<vec>::from(vc);
 
+    stringstream file;
+    file << m_system->path()  << "/stateDensity" << m_system->nParticles() << ".arma";
     if (!join_rows(join_rows(join_rows(e, dos), vcd), idx).eval().save(file.str()))
     {
         cout << "failed at storing " << file.str() << endl;
     }
+
+    m_system->savePositionData(3);
 }

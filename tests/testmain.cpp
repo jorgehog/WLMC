@@ -16,22 +16,22 @@
 using namespace arma;
 using namespace std;
 
-WLMC::Window *harmosc();
+const WLMC::Window &harmosc();
 //void ising();
 
 TEST(HARMOSC)
 {
-    WLMC::Window * mainWindow = harmosc();
+    const WLMC::Window & mainWindow = harmosc();
 
-    vec compareDOS = mainWindow->logDOS()/mainWindow->logDOS(1);
+    vec compareDOS = mainWindow.logDOS()/mainWindow.logDOS(1);
 
     double overlap = 0;
-    for (uint bin = 2; bin < mainWindow->nbins(); ++bin)
+    for (uint bin = 2; bin < mainWindow.nbins(); ++bin)
     {
         overlap += fabs(compareDOS(bin) - 1/sqrt(bin));
     }
 
-    overlap /= (mainWindow->nbins() - 2);
+    overlap /= (mainWindow.nbins() - 2);
 
     CHECK_CLOSE(overlap, 0, 0.1);
 }
@@ -265,15 +265,15 @@ int main()
     return UnitTest::RunAllTests();
 }
 
-WLMC::Window *harmosc()
+const WLMC::Window &harmosc()
 {
 
     uint Np = 1;
-    uint N = 20;
+    uint N = 1000;
 
-    uint nbins = 400;
+    uint nbins = 40;
 
-    double xmax = 10;
+    double xmax = 1;
 
     HarmOsc ho(N, Np, xmax);
 
@@ -281,7 +281,7 @@ WLMC::Window *harmosc()
     s << Np;
 
     DCViz viz("stateDensity" + s.str() + ".arma");
-    viz.launch(true, 0.1, 30, 30);
+//    viz.launch(true, 0.1, 30, 30);
 
     return ho.execute(nbins, 0, 1, 1E-4);
 

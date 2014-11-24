@@ -8,7 +8,7 @@ class HarmOsc : public WLMC::System
 public:
 
     HarmOsc(const uint N, const uint Np, const double xmax) :
-        WLMC::System(Np, N, 1, 1, 1000, 0.8, 5, 10, 1.0, 1E-10, ".", [] () {return randu(1, 1).eval()(0, 0);}),
+        WLMC::System(Np, N, 1, 1, 1000, 0.9, 5, 10, 1.0, -10, ".", [] () {return randu(1, 1).eval()(0, 0);}),
         m_xmax(xmax)
     {
         m_lattice.set_size(N);
@@ -80,12 +80,28 @@ public:
 
     // System interface
 public:
-    void setMaximumConfiguration()
+    double setMaximumConfiguration()
     {
-        m_presetMaximum(0, 0) = m_lattice.size() - 1;
+        m_lattice.zeros();
+
+        for (uint i = m_lattice.size() - nParticles(); i < m_lattice.size(); ++i)
+        {
+            m_lattice(i) = 1;
+            m_nParticles(i + nParticles() - m_lattice.size()) = i;
+        }
+
+        return getTotalValue();
     }
-    void setMinimumConfiguration()
+    double setMinimumConfiguration()
     {
-        m_presetMinimum(0, 0) = 0;
+        m_lattice.zeros();
+
+        for (uint i = 0; i < nParticles(); ++i)
+        {
+            m_lattice(i) = 1;
+            m_nParticles(i) = i;
+        }
+
+        return getTotalValue();
     }
 };

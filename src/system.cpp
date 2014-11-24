@@ -42,11 +42,21 @@ System::System(const uint nParticles,
     m_presetMaximum.set_size(m_nParticles, 3);
 
     BADAss(nParticles, >=, 1, "Number of particles.");
-    BADAss(nParticles, <, m_volume, "Incorrect number of particles.");
+    BADAss(nParticles, <=, m_volume, "Incorrect number of particles.");
 
 }
 
-void System::setMaximumConfiguration()
+System::~System()
+{
+    delete m_mainWindow;
+}
+
+uint System::numberOfPresets(const uint nbins) const
+{
+    return ceil(nbins/double(m_minWindowSize + m_overlap));
+}
+
+double System::setMaximumConfiguration()
 {
     uint sweep, nSweeps, x, y, z;;
     double localMax;
@@ -98,9 +108,13 @@ void System::setMaximumConfiguration()
         sweep++;
     }
 
+    loadConfiguration(m_presetMaximum);
+
+    return max;
+
 }
 
-void System::setMinimumConfiguration()
+double System::setMinimumConfiguration()
 {
     uint nSweeps, sweep, x, y, z;
     double localMin;
@@ -150,6 +164,10 @@ void System::setMinimumConfiguration()
 
         sweep++;
     }
+
+    loadConfiguration(m_presetMinimum);
+
+    return min;
 
 }
 
@@ -240,32 +258,31 @@ void System::consistencyCheckOptimizedValues()
 #endif
 }
 
-Window *System::execute(const uint nbins, const double adaptive, const double logfStart, const double logfEnd, function<double(double)> reduceFunction)
+const Window &System::execute(const uint nbins, const double adaptive, const double logfStart, const double logfEnd, function<double(double)> reduceFunction)
 {
+//    consistencyCheckOptimizedValues();
 
-    consistencyCheckOptimizedValues();
+    m_presetWindowConfigurations.set_size(m_nParticles, 3, numberOfPresets(nbins));
 
     double max, min;
     locateGlobalExtremaValues(min, max);
 
-    Window *mainWindow = new Window(this, nbins, min, max, adaptive);
-    //    clipWindow(*mainWindow);
+    m_mainWindow = new Window(this, nbins, min, max, adaptive);
 
-    setupPresetWindowConfigurations(*mainWindow);
+    setupPresetWindowConfigurations(*m_mainWindow);
 
     m_logf = logfStart;
     while (m_logf >= logfEnd)
     {
-        mainWindow->calculateWindow();
+        m_mainWindow->calculateWindow();
 
         m_logf = reduceFunction(m_logf);
 
-        mainWindow->dump_output();
-        mainWindow->reset();
+        m_mainWindow->reset();
     }
 
-
-    return mainWindow;
+    m_mainWindow->dump_output();
+    return *m_mainWindow;
 
 }
 
@@ -278,6 +295,7 @@ void System::sampleWindow(Window *window)
         if (doWLMCMove(window))
         {
             nMoves++;
+            BADAssBool(window->isLegal(getTotalValue()));
         }
     }
 }
@@ -290,6 +308,8 @@ bool System::doWLMCMove(Window *window)
 
     double oldValue = getTotalValue();
     uint oldBin = window->getBin(oldValue);
+
+    onSuggestedTrialMove(particleIndex, xd, yd, zd);
 
     double newValue = oldValue + getValueDifference(particleIndex, xd, yd, zd);
 
@@ -340,6 +360,9 @@ void System::doRandomMove()
     xd = yd = zd = 0;
 
     getRandomParticleAndDestination(particleIndex, xd, yd, zd);
+
+    onSuggestedTrialMove(particleIndex, xd, yd, zd);
+
     changePosition(particleIndex, xd, yd, zd);
 }
 
@@ -381,45 +404,61 @@ void System::findDestination(const uint destination, uint &xd, uint &yd, uint &z
 
 void System::locateGlobalExtremaValues(double &min, double &max)
 {
-    m_presetMinimum.zeros();
-    setMinimumConfiguration();
-    loadConfiguration(m_presetMinimum);
-    savePositionData(0);
-    min = getTotalValue();
+    uint x, y, z, n;
 
-    m_presetMaximum.zeros();
-    setMaximumConfiguration();
-    loadConfiguration(m_presetMaximum);
-    savePositionData(1);
-    max = getTotalValue();
+    n = m_presetWindowConfigurations.n_slices;
+
+    min = setMinimumConfiguration();
+
+    for (uint i = 0; i < nParticles(); ++i)
+    {
+        getPosition(i, x, y, z);
+        m_presetWindowConfigurations(i, 0, 0) = x;
+        m_presetWindowConfigurations(i, 1, 0) = y;
+        m_presetWindowConfigurations(i, 2, 0) = z;
+    }
+
+    onPresetSave(0);
+
+    max = setMaximumConfiguration();
+
+    for (uint i = 0; i < nParticles(); ++i)
+    {
+        getPosition(i, x, y, z);
+        m_presetWindowConfigurations(i, 0, n - 1) = x;
+        m_presetWindowConfigurations(i, 1, n - 1) = y;
+        m_presetWindowConfigurations(i, 2, n - 1) = z;
+    }
+
+    onPresetSave(n - 1);
 
     cout << "located extrema " << min << " " << max << endl;
 }
 
 void System::setupPresetWindowConfigurations(Window &mainWindow)
 {
+    if (!mainWindow.allowsSubwindowing())
+    {
+        return;
+    }
+
     uint x, y, z, bin, nSet;
     double value, max, min;
 
     max = mainWindow.maxValue();
     min = mainWindow.minValue();
 
-    uint n = ceil(mainWindow.nbins()/double(m_minWindowSize + m_overlap));
+    uint n = numberOfPresets(mainWindow.nbins());
 
-    m_presetWindowConfigurations.set_size(m_nParticles, 3, n);
     m_presetWindowValues = linspace(min, max, n + 1);
 
     uvec binSet = zeros<uvec>(n);
-
-    //Set the max and min as extrema configurations
-    m_presetWindowConfigurations.slice(0) = m_presetMinimum;
-    m_presetWindowConfigurations.slice(n - 1) = m_presetMaximum;
-
     binSet(0) = 1;
     binSet(n - 1) = 1;
     nSet = 2;
 
     uint nMax = 10000;
+    uint nMax2 = 1000;
     uint nTest = 0;
 
     double spaciousness = 10;
@@ -438,17 +477,23 @@ void System::setupPresetWindowConfigurations(Window &mainWindow)
                     continue;
                 }
 
-
                 uint lower = mainWindow.getBin(m_presetWindowValues(bin));
                 uint upper = mainWindow.getBin(m_presetWindowValues(bin + 1));
 
-                cout << "unable to find configuration in window " << lower << " " << upper << ". Deflating." << endl;
+                cout << "unable to find configuration in window "
+                     << m_presetWindowValues(bin) << " "
+                     << m_presetWindowValues(bin + 1)
+                     << ". Deflating." << endl;
 
                 for (uint mwBin = lower; mwBin < upper; ++mwBin)
                 {
                     mainWindow.deflateBin(mwBin);
                 }
             }
+
+            loadConfiguration(m_presetWindowConfigurations.slice(0));
+            onPresetLoad(0);
+            savePositionData(4);
 
             return;
         }
@@ -458,6 +503,12 @@ void System::setupPresetWindowConfigurations(Window &mainWindow)
         //Just in case the extrema calculations went bad
         if (value < min || value > max)
         {
+            if ((nTest + 1)%nMax2 == 0)
+            {
+                loadConfiguration(m_presetMinimum);
+                onPresetLoad(0);
+            }
+
             continue;
         }
 
@@ -487,10 +538,17 @@ void System::setupPresetWindowConfigurations(Window &mainWindow)
             m_presetWindowConfigurations(particleIndex, 2, bin) = z;
         }
 
+        onPresetSave(bin);
+
         cout << "set energy for value " << value << " in bin " << bin << " with energyspan " << m_presetWindowValues(bin) << " - " << m_presetWindowValues(bin + 1) << " " << nSet+1 << "/" << n << endl;
 
         nSet++;
+
+        loadConfiguration(m_presetMinimum);
+        onPresetLoad(0);
+
     }
+
 }
 
 void System::loadConfigurationForWindow(const Window *window)
@@ -503,6 +561,8 @@ void System::loadConfigurationForWindow(const Window *window)
     cout << "value " << value << " belongs in bin " << bin << " between " << m_presetWindowValues(bin) << " - " << m_presetWindowValues(bin + 1) << endl;
 
     loadConfiguration(m_presetWindowConfigurations.slice(bin));
+    onPresetLoad(bin);
+
 }
 
 void System::loadConfiguration(const umat &config)

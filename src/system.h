@@ -29,11 +29,32 @@ public:
            function<double()> URNG,
            bool requiresDestination = true);
 
-    virtual ~System() {}
+    virtual ~System();
 
-    virtual void setMaximumConfiguration();
+    virtual void onSuggestedTrialMove(const uint particleIndex, const uint xd, const uint yd, const uint zd)
+    {
+        (void) particleIndex;
 
-    virtual void setMinimumConfiguration();
+        (void) xd;
+        (void) yd;
+        (void) zd;
+    }
+
+    virtual void onPresetSave(const uint n)
+    {
+        (void) n;
+    }
+
+    virtual void onPresetLoad(const uint n)
+    {
+        (void) n;
+    }
+
+    uint numberOfPresets(const uint nbins) const;
+
+    virtual double setMaximumConfiguration();
+
+    virtual double setMinimumConfiguration();
 
     virtual bool isOccupiedLoction(const uint x, const uint y, const uint z) const = 0;
 
@@ -51,9 +72,9 @@ public:
 
     void consistencyCheckOptimizedValues();
 
-    Window *execute(const uint nbins, const double adaptive, const double fStart, const double fEnd, function<double(double)> reduceFunction);
+    const Window &execute(const uint nbins, const double adaptive, const double fStart, const double fEnd, function<double(double)> reduceFunction);
 
-    Window *execute(const uint nbins, const double adaptive, const double logfStart, const double logfEnd, const double logfReduceFactor = 0.5)
+    const Window &execute(const uint nbins, const double adaptive, const double logfStart, const double logfEnd, const double logfReduceFactor = 0.5)
     {
         return execute(nbins, adaptive, logfStart, logfEnd, [&logfReduceFactor] (double pre) {return logfReduceFactor*pre;});
     }
@@ -135,6 +156,21 @@ public:
         return m_path;
     }
 
+    const uint &NX() const
+    {
+        return m_NX;
+    }
+
+    const uint &NY() const
+    {
+        return m_NY;
+    }
+
+    const uint &NZ() const
+    {
+        return m_NZ;
+    }
+
     enum class extrema
     {
         minimum,
@@ -142,6 +178,8 @@ public:
     };
 
 private:
+
+    Window *m_mainWindow;
 
     const uint m_nParticles;
 
@@ -175,9 +213,6 @@ private:
     double getGlobalExtremum(const extrema type);
 
     void randomizeParticlePositions();
-
-
-protected:
 
     umat m_presetMinimum;
     umat m_presetMaximum;
