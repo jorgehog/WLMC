@@ -27,7 +27,8 @@ public:
            const double deflationLimit,
            const string path,
            function<double()> URNG,
-           bool requiresDestination = true);
+           bool requiresDestination = true,
+           bool requireParticlePositions = true);
 
     virtual ~System();
 
@@ -70,11 +71,17 @@ public:
 
     virtual void savePositionData(const uint framenumber) const;
 
+    virtual void shiftDOS(vec &logDOS)
+    {
+        double m = logDOS.max();
+        logDOS -= m;
+    }
+
     void consistencyCheckOptimizedValues();
 
-    const Window &execute(const uint nbins, const double adaptive, const double fStart, const double fEnd, function<double(double)> reduceFunction);
+    Window &execute(const uint nbins, const double adaptive, const double fStart, const double fEnd, function<double(double)> reduceFunction);
 
-    const Window &execute(const uint nbins, const double adaptive, const double logfStart, const double logfEnd, const double logfReduceFactor = 0.5)
+    Window &execute(const uint nbins, const double adaptive, const double logfStart, const double logfEnd, const double logfReduceFactor = 0.5)
     {
         return execute(nbins, adaptive, logfStart, logfEnd, [&logfReduceFactor] (double pre) {return logfReduceFactor*pre;});
     }
@@ -206,6 +213,7 @@ private:
     const string m_path;
 
     const bool m_requiresDestination;
+    const bool m_requiresPositions;
 
     ucube m_presetWindowConfigurations;
     vec m_presetWindowValues;

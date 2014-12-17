@@ -626,6 +626,13 @@ void Window::deflateDOS()
     }
 }
 
+void Window::normaliseDOS()
+{
+    m_system->shiftDOS(m_logDOS);
+    deflateDOS();
+}
+
+
 void Window::resetDOS()
 {
     m_logDOS.ones();
@@ -790,7 +797,7 @@ uint Window::getOverlapPoint(const Window *other)
 
 }
 
-void Window::dump_output() const
+void Window::dump_output()
 {
 
     ofstream fFlat;
@@ -819,6 +826,8 @@ void Window::dump_output() const
 
 
     uvec vc = m_visitCounts(indices);
+
+    m_system->shiftDOS(m_logDOS);
 
     vec dos = m_logDOS(indices);
     vec e = E(indices);

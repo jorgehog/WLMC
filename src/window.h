@@ -58,6 +58,7 @@ public:
         return estimateFlatness(0, m_nbins);
     }
 
+
     void findSubWindows();
 
     double getMeanFlatness(const uint lowerLimit, const uint upperLimit) const;
@@ -124,11 +125,6 @@ public:
     const uint &lowerLimitOnParent() const
     {
         return m_lowerLimitOnParent;
-    }
-
-    void rofl(const uint p)
-    {
-        m_lowerLimitOnParent = m_upperLimitOnParent = p;
     }
 
     const uint &upperLimitOnParent() const
@@ -215,7 +211,7 @@ public:
         return m_overlapType == OverlapTypes::Lower;
     }
 
-    void dump_output() const;
+    void dump_output();
 
     bool atBoundaryValue() const;
 
@@ -264,13 +260,7 @@ private:
 
     void deflateDOS();
 
-    void normaliseDOS()
-    {
-        double m = m_logDOS.max();
-        m_logDOS -= m;
-
-        deflateDOS();
-    }
+    void normaliseDOS();
 
     void mergeWith(Window *other);
 

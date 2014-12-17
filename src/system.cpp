@@ -21,7 +21,8 @@ System::System(const uint nParticles,
                const double deflationLimit,
                const string path,
                function<double()> URNG,
-               bool requiresDestination) :
+               bool requiresDestination,
+               bool requireParticlePositions) :
     m_nParticles(nParticles),
     m_NX(NX),
     m_NY(NY),
@@ -36,7 +37,8 @@ System::System(const uint nParticles,
     m_flatnessGradientTreshold(flatnessGradientTreshold),
     m_URNG(URNG),
     m_path(path),
-    m_requiresDestination(requiresDestination)
+    m_requiresDestination(requiresDestination),
+    m_requiresPositions(requireParticlePositions)
 {
     m_presetMinimum.set_size(m_nParticles, 3);
     m_presetMaximum.set_size(m_nParticles, 3);
@@ -258,7 +260,7 @@ void System::consistencyCheckOptimizedValues()
 #endif
 }
 
-const Window &System::execute(const uint nbins, const double adaptive, const double logfStart, const double logfEnd, function<double(double)> reduceFunction)
+Window &System::execute(const uint nbins, const double adaptive, const double logfStart, const double logfEnd, function<double(double)> reduceFunction)
 {
 //    consistencyCheckOptimizedValues();
 
@@ -567,6 +569,11 @@ void System::loadConfigurationForWindow(const Window *window)
 
 void System::loadConfiguration(const umat &config)
 {
+    if (!m_requiresPositions)
+    {
+        return;
+    }
+
     uint xPreset, yPreset, zPreset, x, y, z, xAvailable, yAvailable, zAvailable, particleIndexConfig;
 
     xAvailable = yAvailable = zAvailable = 0;
